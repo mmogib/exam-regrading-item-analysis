@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RegradingTab } from "@/components/re-grading";
@@ -15,13 +15,13 @@ export default function Home() {
             <div className="absolute top-0 left-1/4 w-64 h-64 bg-primary rounded-full blur-3xl" />
             <div className="absolute top-0 right-1/4 w-64 h-64 bg-accent rounded-full blur-3xl" />
           </div>
-          
+
           <div className="inline-flex items-center gap-3 mb-4">
             <div className="p-3 bg-primary/10 rounded-lg">
               <GraduationCap className="h-8 w-8 text-primary" />
             </div>
           </div>
-          
+
           <h1 className="text-4xl md:text-5xl font-serif font-bold text-primary tracking-tight">
             Department of Mathematics
           </h1>
@@ -45,11 +45,11 @@ export default function Home() {
                 Uncoding
               </TabsTrigger>
             </TabsList>
-            
+
             <TabsContent value="regrading" className="mt-6">
               <RegradingTab />
             </TabsContent>
-            
+
             <TabsContent value="uncoding" className="mt-6">
               <UncodingTab />
             </TabsContent>
@@ -60,7 +60,9 @@ export default function Home() {
         <footer className="mt-12 text-center text-sm text-muted-foreground">
           <div className="flex items-center justify-center gap-2">
             <span>Developed by</span>
-            <span className="font-semibold text-foreground">Dr. Nasir Abbas</span>
+            <span className="font-semibold text-foreground">
+              Dr. Nasir Abbas and Dr. Mohammed Alshahrani
+            </span>
             <span>•</span>
             <span>Department of Mathematics, KFUPM</span>
           </div>
