@@ -34,6 +34,17 @@ export interface ItemAnalysisRow {
 export interface AverageResult {
   Master_Question: number;
   Average_score: number;
+  codeStats: {
+    [code: string]: {
+      count: number;
+      average: number;
+    };
+  };
+}
+
+export interface CodeAverageResult {
+  Code: number;
+  Average_score: number;
 }
 
 // CSV format detection types

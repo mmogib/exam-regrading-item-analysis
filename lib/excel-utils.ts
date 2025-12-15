@@ -6,6 +6,7 @@ import {
   CorrectAnswersMap,
   ItemAnalysisRow,
   AverageResult,
+  CodeAverageResult,
   SOLUTION_ID,
   SOLUTION_SECTION,
   ANS_CHOICES,
@@ -534,30 +535,139 @@ export function computeAverageResults(
 
   console.log('DEBUG - Total mapped answers:', mappedAnswers.length);
 
-  // Calculate averages per master question
+  // Calculate averages per master question and per code
   const masterQuestionScores: { [masterQ: number]: number[] } = {};
-  
+  const masterQuestionCodeScores: {
+    [masterQ: number]: {
+      [code: number]: number[]
+    }
+  } = {};
+
   mappedAnswers.forEach(ma => {
+    // Overall scores per master question
     if (!masterQuestionScores[ma.order_in_master]) {
       masterQuestionScores[ma.order_in_master] = [];
     }
     masterQuestionScores[ma.order_in_master].push(ma.is_correct);
+
+    // Per-code scores per master question
+    if (!masterQuestionCodeScores[ma.order_in_master]) {
+      masterQuestionCodeScores[ma.order_in_master] = {};
+    }
+    if (!masterQuestionCodeScores[ma.order_in_master][ma.code]) {
+      masterQuestionCodeScores[ma.order_in_master][ma.code] = [];
+    }
+    masterQuestionCodeScores[ma.order_in_master][ma.code].push(ma.is_correct);
   });
 
   const results: AverageResult[] = [];
   const maxMasterQ = Math.max(...Object.keys(masterQuestionScores).map(Number), numQuestions);
-  
+
   for (let masterQ = 1; masterQ <= maxMasterQ; masterQ++) {
     const scores = masterQuestionScores[masterQ] || [];
-    const avg = scores.length > 0 
+
+    // Calculate overall average
+    const avg = scores.length > 0
       ? (scores.reduce((a, b) => a + b, 0) / scores.length) * 100
       : 0;
-    
+
+    // Calculate per-code statistics
+    const codeStats: { [code: string]: { count: number; average: number } } = {};
+    const codeScores = masterQuestionCodeScores[masterQ] || {};
+
+    Object.keys(codeScores).forEach(codeStr => {
+      const code = parseInt(codeStr);
+      const codeAnswers = codeScores[code];
+      const codeAvg = codeAnswers.length > 0
+        ? (codeAnswers.reduce((a, b) => a + b, 0) / codeAnswers.length) * 100
+        : 0;
+
+      codeStats[codeStr] = {
+        count: codeAnswers.length,
+        average: Math.round(codeAvg * 100) / 100
+      };
+    });
+
     results.push({
       Master_Question: masterQ,
-      Average_score: Math.round(avg * 100) / 100
+      Average_score: Math.round(avg * 100) / 100,
+      codeStats
     });
   }
+
+  return results;
+}
+
+/**
+ * Compute average scores per code/version (for uncoding)
+ */
+export function computeCodeAverages(
+  answersData: ExamRow[],
+  itemAnalysisData: ItemAnalysisRow[],
+  numQuestions: number
+): CodeAverageResult[] {
+  const qCols = getAllQuestionCols(answersData).slice(0, numQuestions);
+
+  // Get solution rows and build correct answers map
+  const solutions = answersData.filter(row => row.ID === SOLUTION_ID && row.Section === SOLUTION_SECTION);
+  if (solutions.length === 0) {
+    throw new Error('No solution rows found');
+  }
+
+  // Get students (non-solution rows)
+  const students = answersData.filter(row => !(row.ID === SOLUTION_ID && row.Section === SOLUTION_SECTION));
+  if (students.length === 0) {
+    throw new Error('No student rows found');
+  }
+
+  // Get codes used by students
+  const usedCodes = Array.from(new Set(
+    students.map(s => parseInt(s.Code)).filter(c => !isNaN(c))
+  )).sort((a, b) => a - b);
+
+  // Build correct answers sets per code
+  const correctSets: { [code: string]: AnswerChoice[][] } = {};
+  solutions.forEach(sol => {
+    const code = parseInt(sol.Code);
+    if (usedCodes.includes(code)) {
+      correctSets[String(code)] = qCols.map(col => parseSolutionCell(sol[col]));
+    }
+  });
+
+  // Group scores by code
+  const codeScores: { [code: number]: number[] } = {};
+  usedCodes.forEach(code => {
+    codeScores[code] = [];
+  });
+
+  students.forEach(student => {
+    const code = parseInt(student.Code);
+    if (isNaN(code) || !usedCodes.includes(code)) return;
+
+    qCols.forEach((col, idx) => {
+      const answer = student[col];
+      if (!answer) return;
+
+      const correctSet = correctSets[String(code)]?.[idx] || [];
+      const isCorrect = correctSet.includes(answer as AnswerChoice) ? 1 : 0;
+      codeScores[code].push(isCorrect);
+    });
+  });
+
+  // Calculate statistics per code
+  const results: CodeAverageResult[] = usedCodes.map(code => {
+    const scores = codeScores[code] || [];
+
+    // Calculate average
+    const avg = scores.length > 0
+      ? (scores.reduce((a, b) => a + b, 0) / scores.length) * 100
+      : 0;
+
+    return {
+      Code: code,
+      Average_score: Math.round(avg * 100) / 100
+    };
+  });
 
   return results;
 }

@@ -13,15 +13,17 @@ import {
   getAllQuestionCols,
   guessNumQuestions,
   computeAverageResults,
+  computeCodeAverages,
   exportToExcel,
   parseCSVWithMapping,
   normalizeItemAnalysis
 } from '@/lib/excel-utils';
-import { 
-  ExamRow, 
-  ItemAnalysisRow, 
-  AverageResult, 
-  SOLUTION_ID, 
+import {
+  ExamRow,
+  ItemAnalysisRow,
+  AverageResult,
+  CodeAverageResult,
+  SOLUTION_ID,
   SOLUTION_SECTION,
   CSVDetectionResult,
   ColumnMapping
@@ -34,6 +36,7 @@ export function UncodingTab() {
   const [itemAnalysisData, setItemAnalysisData] = useState<ItemAnalysisRow[]>([]);
   const [numQuestions, setNumQuestions] = useState<number>(0);
   const [averageResults, setAverageResults] = useState<AverageResult[]>([]);
+  const [codeAverages, setCodeAverages] = useState<CodeAverageResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [usedCodes, setUsedCodes] = useState<string[]>([]);
 
@@ -134,7 +137,9 @@ export function UncodingTab() {
     setLoading(true);
     try {
       const results = computeAverageResults(answersData, itemAnalysisData, numQuestions);
+      const codeResults = computeCodeAverages(answersData, itemAnalysisData, numQuestions);
       setAverageResults(results);
+      setCodeAverages(codeResults);
     } catch (error: any) {
       console.error('Error computing averages:', error);
       alert(error.message || 'Error computing averages.');
@@ -145,7 +150,32 @@ export function UncodingTab() {
 
   const downloadAverageResults = () => {
     if (averageResults.length === 0) return;
-    exportToExcel(averageResults, 'average_results.xlsx', 'average_results');
+
+    // Flatten codeStats for Excel export
+    const flattenedResults = averageResults.map(row => {
+      const flattened: any = {
+        Master_Question: row.Master_Question,
+        Average_score: row.Average_score
+      };
+
+      // Get all codes sorted numerically
+      const codes = Object.keys(row.codeStats).sort((a, b) => parseInt(a) - parseInt(b));
+
+      // Add code stats as separate columns
+      codes.forEach(code => {
+        flattened[`Code ${code} - Count`] = row.codeStats[code].count;
+        flattened[`Code ${code} - Avg`] = row.codeStats[code].average;
+      });
+
+      return flattened;
+    });
+
+    exportToExcel(flattenedResults, 'average_results.xlsx', 'average_results');
+  };
+
+  const downloadCodeAverages = () => {
+    if (codeAverages.length === 0) return;
+    exportToExcel(codeAverages, 'code_averages.xlsx', 'code_averages');
   };
 
   return (
@@ -223,18 +253,44 @@ export function UncodingTab() {
                 />
               </div>
 
-              {usedCodes.length > 0 && (
-                <div className="p-4 bg-muted/50 rounded-md">
-                  <p className="text-sm">
-                    <strong>Codes detected in answers:</strong>{' '}
-                    {usedCodes.map((c, i) => (
-                      <code key={i} className="text-xs bg-background px-1 py-0.5 rounded mx-0.5">
-                        {c}
-                      </code>
-                    ))}
-                  </p>
+              {/* Student Statistics Card */}
+              <div className="border-2 border-blue-200 dark:border-blue-800 rounded-lg bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 p-6">
+                <div className="space-y-4">
+                  {/* Total Students */}
+                  <div className="flex items-center justify-between pb-4 border-b border-blue-200 dark:border-blue-800">
+                    <span className="text-sm font-semibold text-blue-900 dark:text-blue-100">Total Students:</span>
+                    <span className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                      {answersData.filter(row => !(row.ID === SOLUTION_ID && row.Section === SOLUTION_SECTION)).length}
+                    </span>
+                  </div>
+
+                  {/* Students per Code */}
+                  {usedCodes.length > 0 && (
+                    <div>
+                      <p className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-3">Students per Code:</p>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                        {usedCodes.map((code) => {
+                          const count = answersData.filter(
+                            row => row.Code === code && !(row.ID === SOLUTION_ID && row.Section === SOLUTION_SECTION)
+                          ).length;
+                          return (
+                            <div
+                              key={code}
+                              className="bg-white dark:bg-slate-800 rounded-lg p-3 border-2 border-blue-300 dark:border-blue-700 shadow-sm hover:shadow-md transition-shadow"
+                            >
+                              <div className="text-xs font-medium text-blue-700 dark:text-blue-300 mb-1">Code</div>
+                              <div className="text-xl font-bold text-blue-900 dark:text-blue-100 mb-1">{code}</div>
+                              <div className="text-sm text-blue-600 dark:text-blue-400">
+                                {count} {count === 1 ? 'student' : 'students'}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              )}
+              </div>
             </div>
           )}
         </CardContent>
@@ -370,43 +426,128 @@ export function UncodingTab() {
       )}
 
       {averageResults.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Average Results</CardTitle>
-            <CardDescription>
-              Average % correct per master question
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <Button onClick={downloadAverageResults} variant="default">
-              <Download className="mr-2 h-4 w-4" />
-              Download average_results.xlsx
-            </Button>
+        <>
+          {/* Master Question Statistics */}
+          <Card className="border-2 border-purple-200 dark:border-purple-800">
+            <CardHeader className="bg-purple-50 dark:bg-purple-950/30">
+              <CardTitle className="text-purple-900 dark:text-purple-100">Master Question Statistics</CardTitle>
+              <CardDescription className="text-purple-700 dark:text-purple-300">
+                Performance statistics for each master question across all exam versions
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4 pt-6">
+              <Button onClick={downloadAverageResults} className="bg-purple-600 hover:bg-purple-700">
+                <Download className="mr-2 h-4 w-4" />
+                Download average_results.xlsx
+              </Button>
 
-            <div className="border rounded-lg overflow-hidden">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Master Question</TableHead>
-                    <TableHead className="text-right">Average Score (%)</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {averageResults.map((row) => (
-                    <TableRow key={row.Master_Question}>
-                      <TableCell className="font-semibold">Q{row.Master_Question}</TableCell>
-                      <TableCell className="text-right">
-                        <span className={row.Average_score >= 70 ? 'text-green-600 font-semibold' : row.Average_score >= 50 ? 'text-yellow-600' : 'text-red-600'}>
-                          {row.Average_score.toFixed(2)}%
-                        </span>
-                      </TableCell>
+              <div className="border-2 rounded-lg overflow-hidden overflow-x-auto">
+                <Table>
+                  <TableHeader className="bg-slate-100 dark:bg-slate-800">
+                    <TableRow>
+                      <TableHead className="font-bold">Master Question</TableHead>
+                      <TableHead className="text-right font-bold">Average (%)</TableHead>
+                      {(() => {
+                        // Get all unique codes from the first result's codeStats
+                        const codes = averageResults.length > 0
+                          ? Object.keys(averageResults[0].codeStats).sort((a, b) => parseInt(a) - parseInt(b))
+                          : [];
+                        return codes.flatMap(code => [
+                          <TableHead key={`${code}-count`} className="text-right font-bold">Code {code} - Count</TableHead>,
+                          <TableHead key={`${code}-avg`} className="text-right font-bold">Code {code} - Avg (%)</TableHead>
+                        ]);
+                      })()}
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
+                  </TableHeader>
+                  <TableBody>
+                    {averageResults.map((row) => {
+                      const codes = Object.keys(row.codeStats).sort((a, b) => parseInt(a) - parseInt(b));
+                      return (
+                        <TableRow key={row.Master_Question} className="hover:bg-slate-50 dark:hover:bg-slate-900/50">
+                          <TableCell className="font-semibold">Q{row.Master_Question}</TableCell>
+                          <TableCell className="text-right">
+                            <span className={`font-bold text-lg ${
+                              row.Average_score >= 70 ? 'text-green-600 dark:text-green-400' :
+                              row.Average_score >= 50 ? 'text-yellow-600 dark:text-yellow-400' :
+                              'text-red-600 dark:text-red-400'
+                            }`}>
+                              {row.Average_score.toFixed(2)}%
+                            </span>
+                          </TableCell>
+                          {codes.flatMap(code => [
+                            <TableCell key={`${code}-count`} className="text-right">
+                              <span className="text-sm text-slate-600 dark:text-slate-400">
+                                {row.codeStats[code].count}
+                              </span>
+                            </TableCell>,
+                            <TableCell key={`${code}-avg`} className="text-right">
+                              <span className={`font-semibold ${
+                                row.codeStats[code].average >= 70 ? 'text-green-600 dark:text-green-400' :
+                                row.codeStats[code].average >= 50 ? 'text-yellow-600 dark:text-yellow-400' :
+                                'text-red-600 dark:text-red-400'
+                              }`}>
+                                {row.codeStats[code].average.toFixed(2)}%
+                              </span>
+                            </TableCell>
+                          ])}
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Code/Version Statistics */}
+          {codeAverages.length > 0 && (
+            <Card className="border-2 border-blue-200 dark:border-blue-800">
+              <CardHeader className="bg-blue-50 dark:bg-blue-950/30">
+                <CardTitle className="text-blue-900 dark:text-blue-100">Exam Version Statistics</CardTitle>
+                <CardDescription className="text-blue-700 dark:text-blue-300">
+                  Performance statistics for each exam code/version
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4 pt-6">
+                <Button onClick={downloadCodeAverages} className="bg-blue-600 hover:bg-blue-700">
+                  <Download className="mr-2 h-4 w-4" />
+                  Download code_averages.xlsx
+                </Button>
+
+                <div className="border-2 rounded-lg overflow-hidden">
+                  <Table>
+                    <TableHeader className="bg-slate-100 dark:bg-slate-800">
+                      <TableRow>
+                        <TableHead className="font-bold">Code/Version</TableHead>
+                        <TableHead className="text-right font-bold">Average (%)</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {codeAverages.map((row) => (
+                        <TableRow key={row.Code} className="hover:bg-slate-50 dark:hover:bg-slate-900/50">
+                          <TableCell>
+                            <span className="px-3 py-1 bg-slate-200 dark:bg-slate-700 rounded font-bold text-lg">
+                              {row.Code}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <span className={`font-bold text-lg ${
+                              row.Average_score >= 70 ? 'text-green-600 dark:text-green-400' :
+                              row.Average_score >= 50 ? 'text-yellow-600 dark:text-yellow-400' :
+                              'text-red-600 dark:text-red-400'
+                            }`}>
+                              {row.Average_score.toFixed(2)}%
+                            </span>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </>
       )}
     </div>
   );
