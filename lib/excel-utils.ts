@@ -18,6 +18,13 @@ import {
 /**
  * Read Excel file and convert to ExamRow array
  */
+// Store the original column order from the last read file
+let originalColumnOrder: string[] = [];
+
+export function getOriginalColumnOrder(): string[] {
+  return originalColumnOrder;
+}
+
 export async function readExcelFile(file: File): Promise<ExamRow[]> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -26,6 +33,19 @@ export async function readExcelFile(file: File): Promise<ExamRow[]> {
         const data = new Uint8Array(e.target?.result as ArrayBuffer);
         const workbook = XLSX.read(data, { type: 'array' });
         const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+
+        // Get the original column order from the sheet's range
+        const range = XLSX.utils.decode_range(firstSheet['!ref'] || 'A1');
+        const headers: string[] = [];
+        for (let col = range.s.c; col <= range.e.c; col++) {
+          const cellAddress = XLSX.utils.encode_cell({ r: range.s.r, c: col });
+          const cell = firstSheet[cellAddress];
+          if (cell && cell.v) {
+            headers.push(String(cell.v));
+          }
+        }
+        originalColumnOrder = headers;
+
         const jsonData = XLSX.utils.sheet_to_json(firstSheet, { defval: '' });
         const normalized = normalizeImportData(jsonData as any[]);
         resolve(normalized);
@@ -309,24 +329,32 @@ export function buildCorrectAnswersMap(
 export function computeResults(
   data: ExamRow[],
   qCols: string[],
-  correctMap: CorrectAnswersMap
+  correctMap: CorrectAnswersMap,
+  pointsPerQuestion: number = POINTS_PER_Q
 ): StudentResult[] {
   const students = data.filter(row => !(row.ID === SOLUTION_ID && row.Section === SOLUTION_SECTION));
-  
+
   return students.map(student => {
     const code = student.Code;
     const correctAnswers = correctMap[code] || [];
-    
+
     let totalScore = 0;
     qCols.forEach((col, idx) => {
-      const answer = student[col];
-      const correct = correctAnswers[idx] || [];
-      if (answer && correct.includes(answer as AnswerChoice)) {
-        totalScore += POINTS_PER_Q;
+      const studentAnswer = parseSolutionCell(student[col] || '');
+      const correctAnswer = correctAnswers[idx] || [];
+
+      // Student gets points if their answer is one of the correct answers
+      // For questions with multiple correct answers (e.g., ["A", "B", "E"]),
+      // student gets points if they answered any one of them
+      if (studentAnswer.length > 0) {
+        const studentAnswerStr = studentAnswer[0]; // Student can only answer one choice
+        if (correctAnswer.includes(studentAnswerStr)) {
+          totalScore += pointsPerQuestion;
+        }
       }
     });
 
-    const percentage = (100 * totalScore) / (POINTS_PER_Q * qCols.length);
+    const percentage = (100 * totalScore) / (pointsPerQuestion * qCols.length);
 
     return {
       ID: student.ID,
@@ -347,27 +375,53 @@ export function reviseSolutionRows(
   correctMap: CorrectAnswersMap
 ): ExamRow[] {
   return data.map(row => {
+    // Only update solution rows (ID=000000000, Section=00)
     if (row.ID === SOLUTION_ID && row.Section === SOLUTION_SECTION) {
       const code = row.Code;
       const correctAnswers = correctMap[code];
+
       if (correctAnswers) {
         const revised = { ...row };
+
+        // Replace question columns with the correct answers from correctMap
         qCols.forEach((col, idx) => {
           const letters = correctAnswers[idx];
           revised[col] = letters.length > 0 ? letters.sort().join('') : '';
         });
+
         return revised;
       }
     }
+
+    // Return all other rows (student rows) unchanged
     return row;
   });
 }
 
 /**
- * Export data to Excel file
+ * Export data to Excel file with preserved column order
  */
-export function exportToExcel(data: any[], filename: string, sheetName: string) {
-  const worksheet = XLSX.utils.json_to_sheet(data);
+export function exportToExcel(data: any[], filename: string, sheetName: string, originalData?: any[]) {
+  let worksheet: XLSX.WorkSheet;
+
+  // Use the stored original column order from readExcelFile
+  const headers = getOriginalColumnOrder();
+
+  if (headers.length > 0 && originalData && originalData.length > 0) {
+    // Reorder data to match the original column order
+    const reorderedData = data.map(row => {
+      const orderedRow: any = {};
+      headers.forEach(header => {
+        orderedRow[header] = row[header] !== undefined ? row[header] : '';
+      });
+      return orderedRow;
+    });
+
+    worksheet = XLSX.utils.json_to_sheet(reorderedData, { header: headers });
+  } else {
+    worksheet = XLSX.utils.json_to_sheet(data);
+  }
+
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
   const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });

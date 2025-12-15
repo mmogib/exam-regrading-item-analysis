@@ -31,6 +31,7 @@ export function RegradingTab() {
   const [results, setResults] = useState<StudentResult[]>([]);
   const [revisedData, setRevisedData] = useState<ExamRow[]>([]);
   const [loading, setLoading] = useState(false);
+  const [pointsPerQuestion, setPointsPerQuestion] = useState<number>(5);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const uploadedFile = e.target.files?.[0];
@@ -94,9 +95,9 @@ export function RegradingTab() {
   const handleRegrade = () => {
     setLoading(true);
     try {
-      const studentResults = computeResults(data, qCols, correctMap);
+      const studentResults = computeResults(data, qCols, correctMap, pointsPerQuestion);
       const revisedImport = reviseSolutionRows(data, qCols, correctMap);
-      
+
       setResults(studentResults);
       setRevisedData(revisedImport);
     } catch (error) {
@@ -109,7 +110,7 @@ export function RegradingTab() {
 
   const downloadImportRevised = () => {
     if (revisedData.length === 0) return;
-    exportToExcel(revisedData, 'import_test_data_revised.xlsx', 'import_test_data');
+    exportToExcel(revisedData, 'import_test_data_revised.xlsx', 'import_test_data', data);
   };
 
   const downloadResultsRevised = () => {
@@ -154,6 +155,19 @@ export function RegradingTab() {
                 />
               </div>
 
+              <div className="flex items-center gap-4">
+                <Label htmlFor="points-per-question">Points per question:</Label>
+                <Input
+                  id="points-per-question"
+                  type="number"
+                  min={0.1}
+                  step={0.1}
+                  value={pointsPerQuestion}
+                  onChange={(e) => setPointsPerQuestion(parseFloat(e.target.value) || 5)}
+                  className="w-24"
+                />
+              </div>
+
               <div className="p-4 bg-muted/50 rounded-md">
                 <p className="text-sm">
                   <strong>Detected:</strong> {codes.length} version(s). You selected <strong>{numQuestions}</strong> question(s).
@@ -190,10 +204,11 @@ export function RegradingTab() {
                   <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-2">
                     {qCols.map((_, qIdx) => {
                       const currentAnswers = correctMap[code]?.[qIdx] || [];
+                      const hasNoAnswer = currentAnswers.length === 0;
                       return (
-                        <div key={qIdx} className="flex items-center gap-2 pb-2 border-b last:border-b-0">
+                        <div key={qIdx} className={`flex items-center gap-2 pb-2 border-b last:border-b-0 ${hasNoAnswer ? 'bg-yellow-50 dark:bg-yellow-950/20 px-2 py-1 rounded' : ''}`}>
                           <span className="font-semibold w-12 text-sm">Q{qIdx + 1}</span>
-                          <div className="flex gap-2">
+                          <div className="flex gap-2 flex-1">
                             {ANS_CHOICES.map((choice) => (
                               <div key={choice} className="flex items-center gap-1">
                                 <Checkbox
@@ -209,6 +224,9 @@ export function RegradingTab() {
                                 </Label>
                               </div>
                             ))}
+                            {hasNoAnswer && (
+                              <span className="text-xs text-yellow-700 dark:text-yellow-500 ml-2 font-medium">⚠ No correct answer</span>
+                            )}
                           </div>
                         </div>
                       );
@@ -217,6 +235,42 @@ export function RegradingTab() {
                 </div>
               ))}
             </div>
+
+            {/* Warning for questions with no correct answers */}
+            {(() => {
+              const questionsWithNoAnswer: string[] = [];
+              codes.forEach(code => {
+                qCols.forEach((_, qIdx) => {
+                  const currentAnswers = correctMap[code]?.[qIdx] || [];
+                  if (currentAnswers.length === 0) {
+                    questionsWithNoAnswer.push(`Code ${code}, Q${qIdx + 1}`);
+                  }
+                });
+              });
+              return questionsWithNoAnswer.length > 0 ? (
+                <div className="mt-4 p-4 bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+                  <div className="flex items-start gap-2">
+                    <span className="text-yellow-700 dark:text-yellow-500 text-lg">⚠</span>
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold text-yellow-800 dark:text-yellow-400 mb-1">
+                        Warning: {questionsWithNoAnswer.length} question(s) have no correct answer
+                      </p>
+                      <p className="text-xs text-yellow-700 dark:text-yellow-500 mb-2">
+                        These questions will award 0 points to all students. This effectively voids/cancels these questions.
+                      </p>
+                      <details className="text-xs text-yellow-700 dark:text-yellow-500">
+                        <summary className="cursor-pointer hover:underline">Show affected questions</summary>
+                        <ul className="mt-2 ml-4 list-disc">
+                          {questionsWithNoAnswer.map((q, idx) => (
+                            <li key={idx}>{q}</li>
+                          ))}
+                        </ul>
+                      </details>
+                    </div>
+                  </div>
+                </div>
+              ) : null;
+            })()}
 
             <div className="mt-6 flex items-center gap-4">
               <Button onClick={handleRegrade} disabled={loading} size="lg">
@@ -232,48 +286,109 @@ export function RegradingTab() {
       )}
 
       {results.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Results</CardTitle>
-            <CardDescription>
-              Preview of re-graded results (first 20 rows). Each correct answer = 5 points.
+        <Card className="border-2 border-green-200 dark:border-green-800">
+          <CardHeader className="bg-green-50 dark:bg-green-950/30">
+            <CardTitle className="text-green-900 dark:text-green-100 flex items-center gap-2">
+              <Check className="h-6 w-6" />
+              Re-grading Complete - Results Ready
+            </CardTitle>
+            <CardDescription className="text-green-700 dark:text-green-300">
+              Successfully re-graded {results.length} student(s) with {pointsPerQuestion} point(s) per correct answer.
+              Download the revised files below.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex gap-4">
-              <Button onClick={downloadImportRevised} variant="default">
-                <Download className="mr-2 h-4 w-4" />
-                Download import_test_data_revised.xlsx
-              </Button>
-              <Button onClick={downloadResultsRevised} variant="default">
-                <Download className="mr-2 h-4 w-4" />
-                Download results_id_export_revised.xlsx
-              </Button>
+          <CardContent className="space-y-6 pt-6">
+            {/* Download Buttons Section */}
+            <div className="grid md:grid-cols-2 gap-4">
+              {/* Original Data File */}
+              <div className="border-2 border-blue-200 dark:border-blue-800 rounded-lg p-4 bg-blue-50 dark:bg-blue-950/20">
+                <div className="flex items-start gap-3 mb-3">
+                  <div className="h-10 w-10 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0">
+                    <span className="text-white font-bold text-lg">1</span>
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-blue-900 dark:text-blue-100 mb-1">
+                      Original Data (Revised)
+                    </h3>
+                    <p className="text-xs text-blue-700 dark:text-blue-300 mb-3">
+                      Contains all student answers with updated solution rows based on your corrections.
+                      Same format as uploaded file.
+                    </p>
+                    <Button onClick={downloadImportRevised} className="w-full bg-blue-600 hover:bg-blue-700">
+                      <Download className="mr-2 h-4 w-4" />
+                      import_test_data_revised.xlsx
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Results File */}
+              <div className="border-2 border-purple-200 dark:border-purple-800 rounded-lg p-4 bg-purple-50 dark:bg-purple-950/20">
+                <div className="flex items-start gap-3 mb-3">
+                  <div className="h-10 w-10 rounded-full bg-purple-500 flex items-center justify-center flex-shrink-0">
+                    <span className="text-white font-bold text-lg">2</span>
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-purple-900 dark:text-purple-100 mb-1">
+                      Student Results
+                    </h3>
+                    <p className="text-xs text-purple-700 dark:text-purple-300 mb-3">
+                      Contains student scores and percentages. Includes ID, Section, Code, Total Score, and Percentage.
+                    </p>
+                    <Button onClick={downloadResultsRevised} className="w-full bg-purple-600 hover:bg-purple-700">
+                      <Download className="mr-2 h-4 w-4" />
+                      results_id_export_revised.xlsx
+                    </Button>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            <div className="border rounded-lg overflow-hidden">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>ID</TableHead>
-                    <TableHead>Section</TableHead>
-                    <TableHead>Code</TableHead>
-                    <TableHead className="text-right">Total</TableHead>
-                    <TableHead className="text-right">Percentage</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {results.slice(0, 20).map((row, idx) => (
-                    <TableRow key={idx}>
-                      <TableCell className="font-mono text-xs">{row.ID}</TableCell>
-                      <TableCell>{row.Section}</TableCell>
-                      <TableCell>{row.Code}</TableCell>
-                      <TableCell className="text-right font-semibold">{row.Tot}</TableCell>
-                      <TableCell className="text-right">{row.Per}%</TableCell>
+            {/* Results Preview */}
+            <div className="space-y-2">
+              <h3 className="font-semibold text-lg">Preview: First 20 Students</h3>
+              <div className="border-2 rounded-lg overflow-hidden">
+                <Table>
+                  <TableHeader className="bg-slate-100 dark:bg-slate-800">
+                    <TableRow>
+                      <TableHead className="font-bold">Student ID</TableHead>
+                      <TableHead className="font-bold">Section</TableHead>
+                      <TableHead className="font-bold">Test Code</TableHead>
+                      <TableHead className="text-right font-bold">Total Score</TableHead>
+                      <TableHead className="text-right font-bold">Percentage</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {results.slice(0, 20).map((row, idx) => (
+                      <TableRow key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-900/50">
+                        <TableCell className="font-mono text-sm font-semibold">{row.ID}</TableCell>
+                        <TableCell className="font-medium">{row.Section}</TableCell>
+                        <TableCell>
+                          <span className="px-2 py-1 bg-slate-200 dark:bg-slate-700 rounded text-sm font-semibold">
+                            {row.Code}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <span className="font-bold text-lg text-blue-600 dark:text-blue-400">
+                            {row.Tot}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <span className={`font-bold text-lg ${
+                            row.Per >= 90 ? 'text-green-600 dark:text-green-400' :
+                            row.Per >= 80 ? 'text-blue-600 dark:text-blue-400' :
+                            row.Per >= 70 ? 'text-yellow-600 dark:text-yellow-400' :
+                            row.Per >= 60 ? 'text-orange-600 dark:text-orange-400' :
+                            'text-red-600 dark:text-red-400'
+                          }`}>
+                            {row.Per}%
+                          </span>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             </div>
           </CardContent>
         </Card>
