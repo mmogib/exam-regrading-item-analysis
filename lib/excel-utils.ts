@@ -48,6 +48,14 @@ export async function readExcelFile(file: File): Promise<ExamRow[]> {
         originalColumnOrder = headers;
 
         const jsonData = XLSX.utils.sheet_to_json(firstSheet, { defval: '' });
+
+        // Validate BEFORE normalization to catch column name issues
+        const validation = validateExamDataFormat(jsonData as any[]);
+        if (!validation.valid) {
+          reject(new Error(validation.errors.join('\n')));
+          return;
+        }
+
         const normalized = normalizeImportData(jsonData as any[]);
         resolve(normalized);
       } catch (error) {
@@ -57,6 +65,136 @@ export async function readExcelFile(file: File): Promise<ExamRow[]> {
     reader.onerror = reject;
     reader.readAsArrayBuffer(file);
   });
+}
+
+/**
+ * Read exam data from CSV/TXT file
+ * Supports both comma-delimited and tab-delimited formats
+ */
+export async function readExamDataFromCSV(file: File): Promise<ExamRow[]> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const text = e.target?.result as string;
+
+        // Auto-detect delimiter: try tab first, then comma
+        // xlsx library's read function handles CSV parsing automatically
+        const workbook = XLSX.read(text, {
+          type: 'string',
+          raw: true  // Preserve original values
+        });
+        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+
+        // Get the original column order from the sheet's range
+        const range = XLSX.utils.decode_range(firstSheet['!ref'] || 'A1');
+        const headers: string[] = [];
+        for (let col = range.s.c; col <= range.e.c; col++) {
+          const cellAddress = XLSX.utils.encode_cell({ r: range.s.r, c: col });
+          const cell = firstSheet[cellAddress];
+          if (cell && cell.v) {
+            headers.push(String(cell.v));
+          }
+        }
+        originalColumnOrder = headers;
+
+        const jsonData = XLSX.utils.sheet_to_json(firstSheet, { defval: '' });
+
+        // Validate BEFORE normalization to catch column name issues
+        const validation = validateExamDataFormat(jsonData as any[]);
+        if (!validation.valid) {
+          reject(new Error(validation.errors.join('\n')));
+          return;
+        }
+
+        const normalized = normalizeImportData(jsonData as any[]);
+        resolve(normalized);
+      } catch (error) {
+        reject(error);
+      }
+    };
+    reader.onerror = reject;
+    reader.readAsText(file);
+  });
+}
+
+/**
+ * Read exam data file (auto-detect Excel or CSV/TXT)
+ */
+export async function readExamDataFile(file: File): Promise<ExamRow[]> {
+  const fileName = file.name.toLowerCase();
+
+  if (fileName.endsWith('.csv') || fileName.endsWith('.txt')) {
+    return readExamDataFromCSV(file);
+  } else if (fileName.endsWith('.xls') || fileName.endsWith('.xlsx')) {
+    return readExcelFile(file);
+  } else {
+    throw new Error('Unsupported file format. Please upload .xls, .xlsx, .csv, or .txt file.');
+  }
+}
+
+/**
+ * Validate exam data format
+ * Returns {valid: boolean, errors: string[]}
+ */
+export function validateExamDataFormat(data: any[]): { valid: boolean; errors: string[] } {
+  const errors: string[] = [];
+
+  if (!data || data.length === 0) {
+    errors.push('File is empty');
+    return { valid: false, errors };
+  }
+
+  const firstRow = data[0];
+  const actualColumns = Object.keys(firstRow);
+  const requiredColumns = ['ID', 'Section', 'Code'];
+
+  // Check for required columns with helpful suggestions
+  requiredColumns.forEach(col => {
+    if (!(col in firstRow)) {
+      // Look for similar column names to provide helpful suggestions
+      const similarCols = actualColumns.filter(actualCol =>
+        actualCol.toLowerCase().includes(col.toLowerCase()) ||
+        col.toLowerCase().includes(actualCol.toLowerCase())
+      );
+
+      if (similarCols.length > 0) {
+        errors.push(`Missing required column: "${col}". Found similar column(s): ${similarCols.map(c => `"${c}"`).join(', ')}. Please use the exact column name "${col}".`);
+      } else {
+        errors.push(`Missing required column: "${col}".`);
+      }
+    }
+  });
+
+  // If there are missing required columns, add guidance
+  if (errors.length > 0) {
+    errors.push('');
+    errors.push('Expected column format: ID, Section, Code, 1, 2, 3, ...');
+    errors.push('Please download the template for the correct format or check your column names match exactly.');
+  }
+
+  // Check for at least one question column (numeric column)
+  const questionCols = Object.keys(firstRow).filter(key =>
+    !['form', 'ID', 'Section', 'Code'].includes(key) && /^\d+$/.test(key)
+  );
+
+  if (questionCols.length === 0) {
+    errors.push('No question columns found. Expected numeric columns like 1, 2, 3, etc.');
+  }
+
+  // Check for solution rows (warning only - optional for some workflows)
+  const solutionRows = data.filter(row => {
+    const id = String(row.ID || '').trim();
+    return id === '000000000' || id === '0';
+  });
+
+  // Solution rows are optional - don't error if missing
+  // The app will still work for analysis, just not for re-grading
+
+  return {
+    valid: errors.length === 0,
+    errors
+  };
 }
 
 /**
@@ -146,7 +284,7 @@ function detectCSVFormat(data: any[]): CSVDetectionResult {
 function normalizeImportData(data: any[]): ExamRow[] {
   if (data.length === 0) throw new Error('Empty file');
 
-  return data.map(row => {
+  return data.map((row, idx) => {
     const normalized: ExamRow = {
       form: String(row.form || ''),
       ID: String(row.ID || ''),
@@ -270,7 +408,7 @@ export function parseSolutionCell(value: string): AnswerChoice[] {
  */
 export function guessNumQuestions(data: ExamRow[]): number {
   const qCols = getAllQuestionCols(data);
-  const solutions = data.filter(row => row.ID === SOLUTION_ID && row.Section === SOLUTION_SECTION);
+  const solutions = data.filter(row => isSolutionRow(row));
   
   if (solutions.length === 0) return qCols.length;
 
@@ -287,14 +425,53 @@ export function guessNumQuestions(data: ExamRow[]): number {
 }
 
 /**
+ * Check if a row is a solution row
+ * Solution rows are identified by:
+ * - ID = "000000000" (ITC format) OR empty ID (custom format)
+ * - Section field is NOT checked to avoid issues with typos
+ * EXPORTED for use in components
+ */
+export function isSolutionRow(row: ExamRow): boolean {
+  const id = row.ID.trim();
+  return id === SOLUTION_ID || id === '' || id === '0';
+}
+
+/**
  * Get unique codes from solution rows, sorted numerically
  */
 export function getSolutionCodes(data: ExamRow[]): string[] {
-  const solutions = data.filter(row => row.ID === SOLUTION_ID && row.Section === SOLUTION_SECTION);
+  const solutions = data.filter(row => isSolutionRow(row));
   const codes = Array.from(new Set(solutions.map(s => s.Code)));
-  
+
   // Sort codes: numeric codes first (by value), then alphabetic
   return codes.sort((a, b) => {
+    const numA = parseInt(a);
+    const numB = parseInt(b);
+    if (!isNaN(numA) && !isNaN(numB)) {
+      return numA - numB;
+    }
+    if (!isNaN(numA)) return -1;
+    if (!isNaN(numB)) return 1;
+    return a.localeCompare(b);
+  });
+}
+
+/**
+ * Validate that all student codes have corresponding solution rows
+ * Returns array of codes that are missing solutions
+ */
+export function validateCodesHaveSolutions(data: ExamRow[]): string[] {
+  // Get all codes from students (non-solution rows)
+  const students = data.filter(row => !isSolutionRow(row));
+  const studentCodes = Array.from(new Set(students.map(s => s.Code)));
+
+  // Get all codes from solution rows
+  const solutionCodes = getSolutionCodes(data);
+
+  // Find codes that have students but no solution
+  const codesWithoutSolution = studentCodes.filter(code => !solutionCodes.includes(code));
+
+  return codesWithoutSolution.sort((a, b) => {
     const numA = parseInt(a);
     const numB = parseInt(b);
     if (!isNaN(numA) && !isNaN(numB)) {
@@ -313,7 +490,7 @@ export function buildCorrectAnswersMap(
   data: ExamRow[],
   qCols: string[]
 ): CorrectAnswersMap {
-  const solutions = data.filter(row => row.ID === SOLUTION_ID && row.Section === SOLUTION_SECTION);
+  const solutions = data.filter(row => isSolutionRow(row));
   const map: CorrectAnswersMap = {};
 
   solutions.forEach(sol => {
@@ -333,7 +510,7 @@ export function computeResults(
   correctMap: CorrectAnswersMap,
   pointsPerQuestion: number = POINTS_PER_Q
 ): StudentResult[] {
-  const students = data.filter(row => !(row.ID === SOLUTION_ID && row.Section === SOLUTION_SECTION));
+  const students = data.filter(row => !isSolutionRow(row));
 
   return students.map(student => {
     const code = student.Code;
@@ -376,8 +553,8 @@ export function reviseSolutionRows(
   correctMap: CorrectAnswersMap
 ): ExamRow[] {
   return data.map(row => {
-    // Only update solution rows (ID=000000000, Section=00)
-    if (row.ID === SOLUTION_ID && row.Section === SOLUTION_SECTION) {
+    // Only update solution rows
+    if (isSolutionRow(row)) {
       const code = row.Code;
       const correctAnswers = correctMap[code];
 
@@ -439,15 +616,15 @@ export function computeAverageResults(
   numQuestions: number
 ): AverageResult[] {
   const qCols = getAllQuestionCols(answersData).slice(0, numQuestions);
-  
+
   // Get solution rows and build correct answers map
-  const solutions = answersData.filter(row => row.ID === SOLUTION_ID && row.Section === SOLUTION_SECTION);
+  const solutions = answersData.filter(row => isSolutionRow(row));
   if (solutions.length === 0) {
     throw new Error('No solution rows found');
   }
 
   // Get students (non-solution rows)
-  const students = answersData.filter(row => !(row.ID === SOLUTION_ID && row.Section === SOLUTION_SECTION));
+  const students = answersData.filter(row => !isSolutionRow(row));
   if (students.length === 0) {
     throw new Error('No student rows found');
   }
@@ -609,13 +786,13 @@ export function computeCodeAverages(
   const qCols = getAllQuestionCols(answersData).slice(0, numQuestions);
 
   // Get solution rows and build correct answers map
-  const solutions = answersData.filter(row => row.ID === SOLUTION_ID && row.Section === SOLUTION_SECTION);
+  const solutions = answersData.filter(row => isSolutionRow(row));
   if (solutions.length === 0) {
     throw new Error('No solution rows found');
   }
 
   // Get students (non-solution rows)
-  const students = answersData.filter(row => !(row.ID === SOLUTION_ID && row.Section === SOLUTION_SECTION));
+  const students = answersData.filter(row => !isSolutionRow(row));
   if (students.length === 0) {
     throw new Error('No student rows found');
   }

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { RegradingTab } from "@/components/re-grading";
 import { UncodingTab } from "@/components/uncoding";
-import { GraduationCap, RefreshCw, BarChart3, ArrowLeft } from "lucide-react";
+import { GraduationCap, RefreshCw, BarChart3, Home as HomeIcon } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
@@ -39,6 +39,38 @@ export default function Home() {
             MCQ-Based Exam Re-grading and Item Analysis Tool
           </h2>
         </div>
+
+        {/* Navigation Bar */}
+        <nav className="backdrop-blur-sm bg-white/70 rounded-xl shadow-md border border-white/60 p-4 mb-6">
+          <div className="flex items-center justify-center gap-2 flex-wrap">
+            <Button
+              variant={currentView === 'home' ? 'default' : 'ghost'}
+              onClick={() => setCurrentView('home')}
+              className="gap-2"
+            >
+              <HomeIcon className="h-4 w-4" />
+              Home
+            </Button>
+            <span className="text-muted-foreground">|</span>
+            <Button
+              variant={currentView === 'regrading' ? 'default' : 'ghost'}
+              onClick={() => setCurrentView('regrading')}
+              className="gap-2"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Re-grade Exams
+            </Button>
+            <span className="text-muted-foreground">|</span>
+            <Button
+              variant={currentView === 'analysis' ? 'default' : 'ghost'}
+              onClick={() => setCurrentView('analysis')}
+              className="gap-2"
+            >
+              <BarChart3 className="h-4 w-4" />
+              Cross-Version Analysis
+            </Button>
+          </div>
+        </nav>
 
         {/* Main content */}
         <div className="backdrop-blur-sm bg-white/50 rounded-2xl shadow-xl border border-white/60 p-8">
@@ -151,28 +183,12 @@ export default function Home() {
 
           {currentView === 'regrading' && (
             <div className="space-y-6">
-              <Button
-                onClick={() => setCurrentView('home')}
-                variant="outline"
-                className="mb-4"
-              >
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Back to Home
-              </Button>
               <RegradingTab />
             </div>
           )}
 
           {currentView === 'analysis' && (
             <div className="space-y-6">
-              <Button
-                onClick={() => setCurrentView('home')}
-                variant="outline"
-                className="mb-4"
-              >
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Back to Home
-              </Button>
               <UncodingTab />
             </div>
           )}
