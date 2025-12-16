@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Upload, Download, Calculator, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Upload, Download, Calculator, AlertCircle, CheckCircle2, X } from 'lucide-react';
 import {
   readExcelFile,
   readCSVFileWithDetection,
@@ -16,7 +17,8 @@ import {
   computeCodeAverages,
   exportToExcel,
   parseCSVWithMapping,
-  normalizeItemAnalysis
+  normalizeItemAnalysis,
+  isSolutionRow
 } from '@/lib/excel-utils';
 import {
   ExamRow,
@@ -39,6 +41,7 @@ export function UncodingTab() {
   const [codeAverages, setCodeAverages] = useState<CodeAverageResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [usedCodes, setUsedCodes] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   // CSV format detection states
   const [csvDetection, setCsvDetection] = useState<CSVDetectionResult | null>(null);
@@ -54,12 +57,13 @@ export function UncodingTab() {
     if (!uploadedFile) return;
 
     setLoading(true);
+    setError(null);
     try {
       const examData = await readExcelFile(uploadedFile);
       const guessedNum = guessNumQuestions(examData);
-      
+
       // Get codes used by students (not solution rows)
-      const students = examData.filter(row => !(row.ID === SOLUTION_ID && row.Section === SOLUTION_SECTION));
+      const students = examData.filter(row => !isSolutionRow(row));
       const codes = Array.from(new Set(students.map(s => s.Code))).sort();
 
       setAnswersFile(uploadedFile);
@@ -69,7 +73,7 @@ export function UncodingTab() {
       setAverageResults([]);
     } catch (error) {
       console.error('Error reading answers file:', error);
-      alert('Error reading answers file. Please check the format.');
+      setError('Error reading answers file. Please check the format and try again.');
     } finally {
       setLoading(false);
     }
@@ -80,6 +84,7 @@ export function UncodingTab() {
     if (!uploadedFile) return;
 
     setLoading(true);
+    setError(null);
     try {
       const detection = await readCSVFileWithDetection(uploadedFile);
       setCsvDetection(detection);
@@ -103,7 +108,7 @@ export function UncodingTab() {
       }
     } catch (error) {
       console.error('Error reading item analysis file:', error);
-      alert('Error reading item analysis file. Please check the format.');
+      setError('Error reading item analysis file. Please check the format and try again.');
     } finally {
       setLoading(false);
     }
@@ -111,18 +116,19 @@ export function UncodingTab() {
 
   const handleApplyMapping = () => {
     if (!csvDetection || !columnMapping.code || !columnMapping.order || !columnMapping.orderInMaster) {
-      alert('Please select all three required columns.');
+      setError('Please select all three required columns.');
       return;
     }
 
     setLoading(true);
+    setError(null);
     try {
       const parsedData = parseCSVWithMapping(csvDetection.data, columnMapping);
       setItemAnalysisData(parsedData);
       setShowMappingUI(false);
     } catch (error: any) {
       console.error('Error parsing with custom mapping:', error);
-      alert(error.message || 'Error parsing CSV with custom mapping.');
+      setError(error.message || 'Error parsing CSV with custom mapping. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -130,11 +136,12 @@ export function UncodingTab() {
 
   const handleCompute = () => {
     if (answersData.length === 0 || itemAnalysisData.length === 0 || numQuestions === 0) {
-      alert('Please upload both files and set the number of questions.');
+      setError('Please upload both files and set the number of questions.');
       return;
     }
 
     setLoading(true);
+    setError(null);
     try {
       const results = computeAverageResults(answersData, itemAnalysisData, numQuestions);
       const codeResults = computeCodeAverages(answersData, itemAnalysisData, numQuestions);
@@ -142,7 +149,7 @@ export function UncodingTab() {
       setCodeAverages(codeResults);
     } catch (error: any) {
       console.error('Error computing averages:', error);
-      alert(error.message || 'Error computing averages.');
+      setError(error.message || 'Error computing averages. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -180,11 +187,27 @@ export function UncodingTab() {
 
   return (
     <div className="space-y-6 animate-fade-in">
+      {error && (
+        <Alert variant="destructive" className="relative">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Error</AlertTitle>
+          <AlertDescription className="whitespace-pre-wrap">{error}</AlertDescription>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="absolute right-2 top-2 h-6 w-6 p-0"
+            onClick={() => setError(null)}
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </Alert>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle>Upload Files</CardTitle>
           <CardDescription>
-            Upload both the answer sheet (<code className="text-xs bg-muted px-1 py-0.5 rounded">import_test_data.xls/.xlsx</code> or revised) 
+            Upload both the answer sheet (<code className="text-xs bg-muted px-1 py-0.5 rounded">import_test_data.xls/.xlsx</code> or revised)
             and the <code className="text-xs bg-muted px-1 py-0.5 rounded">item_analysis.csv</code>
           </CardDescription>
         </CardHeader>
@@ -260,7 +283,7 @@ export function UncodingTab() {
                   <div className="flex items-center justify-between pb-4 border-b border-blue-200 dark:border-blue-800">
                     <span className="text-sm font-semibold text-blue-900 dark:text-blue-100">Total Students:</span>
                     <span className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                      {answersData.filter(row => !(row.ID === SOLUTION_ID && row.Section === SOLUTION_SECTION)).length}
+                      {answersData.filter(row => !isSolutionRow(row)).length}
                     </span>
                   </div>
 
@@ -271,7 +294,7 @@ export function UncodingTab() {
                       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
                         {usedCodes.map((code) => {
                           const count = answersData.filter(
-                            row => row.Code === code && !(row.ID === SOLUTION_ID && row.Section === SOLUTION_SECTION)
+                            row => row.Code === code && !isSolutionRow(row)
                           ).length;
                           return (
                             <div

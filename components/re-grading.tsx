@@ -7,17 +7,21 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Upload, Download, Check } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Upload, Download, Check, AlertCircle, AlertTriangle, X } from 'lucide-react';
+import { UploadHelpDialog } from '@/components/upload-help-dialog';
 import {
-  readExcelFile,
+  readExamDataFile,
   getAllQuestionCols,
   guessNumQuestions,
   getSolutionCodes,
+  validateCodesHaveSolutions,
   buildCorrectAnswersMap,
   computeResults,
   reviseSolutionRows,
   exportToExcel,
-  parseSolutionCell
+  parseSolutionCell,
+  validateExamDataFormat
 } from '@/lib/excel-utils';
 import { ExamRow, CorrectAnswersMap, StudentResult, ANS_CHOICES, AnswerChoice } from '@/types/exam';
 
@@ -32,18 +36,37 @@ export function RegradingTab() {
   const [revisedData, setRevisedData] = useState<ExamRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [pointsPerQuestion, setPointsPerQuestion] = useState<number>(5);
+  const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const uploadedFile = e.target.files?.[0];
     if (!uploadedFile) return;
 
     setLoading(true);
+    setError(null);
+    setWarning(null);
     try {
-      const examData = await readExcelFile(uploadedFile);
+      const examData = await readExamDataFile(uploadedFile);
+
       const allQCols = getAllQuestionCols(examData);
       const guessedNum = guessNumQuestions(examData);
       const detectedCodes = getSolutionCodes(examData);
       const selectedQCols = allQCols.slice(0, guessedNum);
+
+      // Check if any student codes are missing solution rows
+      const codesWithoutSolutions = validateCodesHaveSolutions(examData);
+      if (codesWithoutSolutions.length > 0) {
+        const studentCounts = codesWithoutSolutions.map(code => {
+          const count = examData.filter(row =>
+            row.Code === code && row.ID !== '000000000' && row.ID !== '0' && row.ID.trim() !== ''
+          ).length;
+          return `Code "${code}" (${count} student${count !== 1 ? 's' : ''})`;
+        });
+        setWarning(
+          `Warning: The following exam version(s) have students but no solution rows:\n\n${studentCounts.join('\n')}\n\nThese students cannot be graded. Please add solution rows for these codes or verify your data.`
+        );
+      }
 
       // Build initial correct map from solution rows
       const initialMap = buildCorrectAnswersMap(examData, selectedQCols);
@@ -56,9 +79,11 @@ export function RegradingTab() {
       setCorrectMap(initialMap);
       setResults([]);
       setRevisedData([]);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error reading file:', error);
-      alert('Error reading file. Please check the format.');
+      // Display validation errors or generic error message
+      const errorMessage = error.message || 'Error reading file. Please check the format and try again.';
+      setError(`File format validation failed:\n\n${errorMessage}\n\nPlease check the template and format requirements.`);
     } finally {
       setLoading(false);
     }
@@ -94,6 +119,7 @@ export function RegradingTab() {
 
   const handleRegrade = () => {
     setLoading(true);
+    setError(null);
     try {
       const studentResults = computeResults(data, qCols, correctMap, pointsPerQuestion);
       const revisedImport = reviseSolutionRows(data, qCols, correctMap);
@@ -102,7 +128,7 @@ export function RegradingTab() {
       setRevisedData(revisedImport);
     } catch (error) {
       console.error('Error computing results:', error);
-      alert('Error computing results.');
+      setError('Error computing results. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -120,19 +146,56 @@ export function RegradingTab() {
 
   return (
     <div className="space-y-6 animate-fade-in">
+      {error && (
+        <Alert variant="destructive" className="relative">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Error</AlertTitle>
+          <AlertDescription className="whitespace-pre-wrap">{error}</AlertDescription>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="absolute right-2 top-2 h-6 w-6 p-0"
+            onClick={() => setError(null)}
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </Alert>
+      )}
+
+      {warning && (
+        <Alert className="relative border-yellow-500/50 text-yellow-800 dark:text-yellow-300 bg-yellow-50 dark:bg-yellow-950/30">
+          <AlertTriangle className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
+          <AlertTitle>Warning</AlertTitle>
+          <AlertDescription className="whitespace-pre-wrap">{warning}</AlertDescription>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="absolute right-2 top-2 h-6 w-6 p-0"
+            onClick={() => setWarning(null)}
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </Alert>
+      )}
+
       <Card>
         <CardHeader>
-          <CardTitle>Upload Exam Data</CardTitle>
-          <CardDescription>
-            Upload the original <code className="text-xs bg-muted px-1 py-0.5 rounded">import_test_data.xls</code> file (answers for all students and solutions)
-          </CardDescription>
+          <div className="flex items-start justify-between">
+            <div className="flex-1">
+              <CardTitle>Upload Exam Data</CardTitle>
+              <CardDescription>
+                Upload exam file from ITC or use our template format
+              </CardDescription>
+            </div>
+            <UploadHelpDialog />
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center gap-4">
             <Input
               id="file-upload"
               type="file"
-              accept=".xls,.xlsx"
+              accept=".xls,.xlsx,.csv,.txt"
               onChange={handleFileUpload}
               className="flex-1"
               disabled={loading}
