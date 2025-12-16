@@ -11,7 +11,8 @@
       "Bash(findstr:*)",
       "Bash(taskkill /PID 46656 /F)",
       "Bash(cmd //c taskkill //PID 46656 //F)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git -C /c/Users/mmogi/Projects/published_apps/exam-grading-app log --oneline)"
     ],
     "deny": [],
     "ask": []
