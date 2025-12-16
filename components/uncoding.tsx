@@ -10,7 +10,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Upload, Download, Calculator, AlertCircle, CheckCircle2, X } from 'lucide-react';
 import { CrossVersionHelpDialog } from './cross-version-help-dialog';
 import {
-  readExcelFile,
+  readExamDataFile,
   readCSVFileWithDetection,
   getAllQuestionCols,
   guessNumQuestions,
@@ -21,6 +21,7 @@ import {
   normalizeItemAnalysis,
   isSolutionRow
 } from '@/lib/excel-utils';
+import { debug, error as logError } from '@/lib/logger';
 import {
   ExamRow,
   ItemAnalysisRow,
@@ -53,6 +54,53 @@ export function UncodingTab() {
     orderInMaster: ''
   });
 
+  // Code mapping states
+  const [showCodeMappingUI, setShowCodeMappingUI] = useState(false);
+  const [codeMapping, setCodeMapping] = useState<{[answerCode: string]: string}>({});
+  const [itemAnalysisCodes, setItemAnalysisCodes] = useState<string[]>([]);
+
+  // Item analysis processing stats
+  const [itemAnalysisStats, setItemAnalysisStats] = useState<{total: number, valid: number, skipped: number} | null>(null);
+
+  // Helper function to detect code mismatch and suggest mapping
+  const checkCodeMismatch = (answerCodes: string[], itemCodes: string[]) => {
+    // Sort codes: numeric first (by value), then alphabetic
+    const sortCodes = (codes: string[]) => {
+      return [...codes].sort((a, b) => {
+        const numA = parseInt(a);
+        const numB = parseInt(b);
+        if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+        if (!isNaN(numA)) return -1;
+        if (!isNaN(numB)) return 1;
+        return a.localeCompare(b);
+      });
+    };
+
+    const sortedAnswerCodes = sortCodes(answerCodes);
+    const sortedItemCodes = sortCodes(itemCodes);
+
+    // Check if codes match exactly
+    const codesMatch = sortedAnswerCodes.length === sortedItemCodes.length &&
+      sortedAnswerCodes.every((code, idx) => code === sortedItemCodes[idx]);
+
+    if (!codesMatch) {
+      // Create suggested mapping by position
+      const suggested: {[key: string]: string} = {};
+      const minLength = Math.min(sortedAnswerCodes.length, sortedItemCodes.length);
+
+      for (let i = 0; i < minLength; i++) {
+        suggested[sortedAnswerCodes[i]] = sortedItemCodes[i];
+      }
+
+      setCodeMapping(suggested);
+      setItemAnalysisCodes(sortedItemCodes);
+      setShowCodeMappingUI(true);
+    } else {
+      setShowCodeMappingUI(false);
+      setCodeMapping({});
+    }
+  };
+
   const handleAnswersFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const uploadedFile = e.target.files?.[0];
     if (!uploadedFile) return;
@@ -60,7 +108,7 @@ export function UncodingTab() {
     setLoading(true);
     setError(null);
     try {
-      const examData = await readExcelFile(uploadedFile);
+      const examData = await readExamDataFile(uploadedFile);
       const guessedNum = guessNumQuestions(examData);
 
       // Get codes used by students (not solution rows)
@@ -72,9 +120,25 @@ export function UncodingTab() {
       setNumQuestions(guessedNum);
       setUsedCodes(codes);
       setAverageResults([]);
-    } catch (error) {
-      console.error('Error reading answers file:', error);
-      setError('Error reading answers file. Please check the format and try again.');
+
+      // Check for code mismatch if item analysis is already loaded
+      if (itemAnalysisData.length > 0) {
+        // Filter out NaN codes before checking mismatch
+        const itemCodes = Array.from(new Set(
+          itemAnalysisData
+            .map(ia => ia.code)
+            .filter(code => !isNaN(code))
+            .map(code => String(code))
+        )).sort();
+
+        if (itemCodes.length > 0) {
+          checkCodeMismatch(codes, itemCodes);
+        }
+      }
+    } catch (error: any) {
+      logError('Error reading answers file:', error);
+      const errorMessage = error.message || 'Error reading answers file. Please check the format and try again.';
+      setError(`File format validation failed:\n\n${errorMessage}\n\nPlease check the template and format requirements.`);
     } finally {
       setLoading(false);
     }
@@ -103,12 +167,40 @@ export function UncodingTab() {
         });
       } else {
         // Auto-detected format (OLD or NEW) - parse immediately
+        const totalRows = detection.data.length;
         const parsedData = normalizeItemAnalysis(detection.data, detection.format);
+        const validRows = parsedData.length;
+        const skippedRows = totalRows - validRows;
+
+        // Check if we have any valid data
+        if (validRows === 0) {
+          setError(`No valid rows found in item analysis CSV.\n\nAll ${totalRows} rows were skipped due to missing or invalid values.\n\nPlease check that your CSV has valid data in the code, order, and master question columns.`);
+          setItemAnalysisFile(null);
+          setCsvDetection(null);
+          return;
+        }
+
         setItemAnalysisData(parsedData);
+        setItemAnalysisStats({ total: totalRows, valid: validRows, skipped: skippedRows });
         setShowMappingUI(false);
+
+        // Check for code mismatch if answers file is already loaded
+        if (usedCodes.length > 0) {
+          // Filter out NaN codes before checking mismatch
+          const itemCodes = Array.from(new Set(
+            parsedData
+              .map(ia => ia.code)
+              .filter(code => !isNaN(code))
+              .map(code => String(code))
+          )).sort();
+
+          if (itemCodes.length > 0) {
+            checkCodeMismatch(usedCodes, itemCodes);
+          }
+        }
       }
     } catch (error) {
-      console.error('Error reading item analysis file:', error);
+      logError('Error reading item analysis file:', error);
       setError('Error reading item analysis file. Please check the format and try again.');
     } finally {
       setLoading(false);
@@ -124,11 +216,37 @@ export function UncodingTab() {
     setLoading(true);
     setError(null);
     try {
+      const totalRows = csvDetection.data.length;
       const parsedData = parseCSVWithMapping(csvDetection.data, columnMapping);
+      const validRows = parsedData.length;
+      const skippedRows = totalRows - validRows;
+
+      // Check if we have any valid data
+      if (validRows === 0) {
+        setError(`No valid rows found in item analysis CSV.\n\nAll ${totalRows} rows were skipped due to missing or invalid values.\n\nPlease check that your CSV has valid data in the mapped columns.`);
+        return;
+      }
+
       setItemAnalysisData(parsedData);
+      setItemAnalysisStats({ total: totalRows, valid: validRows, skipped: skippedRows });
       setShowMappingUI(false);
+
+      // Check for code mismatch if answers file is already loaded
+      if (usedCodes.length > 0) {
+        // Filter out NaN codes before checking mismatch
+        const itemCodes = Array.from(new Set(
+          parsedData
+            .map(ia => ia.code)
+            .filter(code => !isNaN(code))
+            .map(code => String(code))
+        )).sort();
+
+        if (itemCodes.length > 0) {
+          checkCodeMismatch(usedCodes, itemCodes);
+        }
+      }
     } catch (error: any) {
-      console.error('Error parsing with custom mapping:', error);
+      logError('Error parsing with custom mapping:', error);
       setError(error.message || 'Error parsing CSV with custom mapping. Please try again.');
     } finally {
       setLoading(false);
@@ -144,12 +262,31 @@ export function UncodingTab() {
     setLoading(true);
     setError(null);
     try {
-      const results = computeAverageResults(answersData, itemAnalysisData, numQuestions);
-      const codeResults = computeCodeAverages(answersData, itemAnalysisData, numQuestions);
+      // Apply code mapping if it exists
+      let mappedItemAnalysis = itemAnalysisData;
+      if (Object.keys(codeMapping).length > 0) {
+        // Create reverse mapping: itemCode -> answerCode
+        const reverseMapping: {[itemCode: string]: string} = {};
+        Object.entries(codeMapping).forEach(([answerCode, itemCode]) => {
+          reverseMapping[itemCode] = answerCode;
+        });
+
+        // Map item analysis codes to match answer codes
+        mappedItemAnalysis = itemAnalysisData.map(ia => ({
+          ...ia,
+          code: reverseMapping[String(ia.code)] ? parseInt(reverseMapping[String(ia.code)]) : ia.code
+        }));
+
+        debug('Applied code mapping:', codeMapping);
+        debug('Mapped item analysis sample:', mappedItemAnalysis.slice(0, 5));
+      }
+
+      const results = computeAverageResults(answersData, mappedItemAnalysis, numQuestions);
+      const codeResults = computeCodeAverages(answersData, mappedItemAnalysis, numQuestions);
       setAverageResults(results);
       setCodeAverages(codeResults);
     } catch (error: any) {
-      console.error('Error computing averages:', error);
+      logError('Error computing averages:', error);
       setError(error.message || 'Error computing averages. Please try again.');
     } finally {
       setLoading(false);
@@ -210,8 +347,7 @@ export function UncodingTab() {
             <div className="space-y-1.5">
               <CardTitle>Upload Files</CardTitle>
               <CardDescription>
-                Upload both the answer sheet (<code className="text-xs bg-muted px-1 py-0.5 rounded">import_test_data.xls/.xlsx</code> or revised)
-                and the <code className="text-xs bg-muted px-1 py-0.5 rounded">item_analysis.csv</code>
+                Upload both the answer sheet (.xls/.xlsx/.csv/.txt) and the item analysis file (.csv)
               </CardDescription>
             </div>
             <CrossVersionHelpDialog />
@@ -220,12 +356,12 @@ export function UncodingTab() {
         <CardContent className="space-y-6">
           <div className="grid gap-6 md:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="answers-file">Answers File (.xls/.xlsx)</Label>
+              <Label htmlFor="answers-file">Answers File (.xls/.xlsx/.csv/.txt)</Label>
               <div className="flex items-center gap-2">
                 <Input
                   id="answers-file"
                   type="file"
-                  accept=".xls,.xlsx"
+                  accept=".xls,.xlsx,.csv,.txt"
                   onChange={handleAnswersFileUpload}
                   disabled={loading}
                 />
@@ -251,17 +387,32 @@ export function UncodingTab() {
                 <Upload className="h-5 w-5 text-muted-foreground shrink-0" />
               </div>
               {itemAnalysisFile && csvDetection && (
-                <div className="flex items-center gap-2 text-xs">
-                  {csvDetection.format === 'UNKNOWN' ? (
-                    <AlertCircle className="h-4 w-4 text-yellow-600" />
-                  ) : (
-                    <CheckCircle2 className="h-4 w-4 text-green-600" />
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground">
+                    ✓ Loaded: {itemAnalysisFile.name}
+                  </p>
+                  <div className="flex items-center gap-2 text-xs">
+                    {csvDetection.format === 'UNKNOWN' ? (
+                      <AlertCircle className="h-4 w-4 text-yellow-600" />
+                    ) : (
+                      <CheckCircle2 className="h-4 w-4 text-green-600" />
+                    )}
+                    <span className={csvDetection.format === 'UNKNOWN' ? 'text-yellow-600' : 'text-green-600'}>
+                      {csvDetection.format === 'UNKNOWN'
+                        ? 'Unknown format - mapping required'
+                        : 'Format: auto-detected'}
+                    </span>
+                  </div>
+                  {itemAnalysisStats && (
+                    <p className="text-xs text-muted-foreground">
+                      Processed: {itemAnalysisStats.valid} row{itemAnalysisStats.valid !== 1 ? 's' : ''}
+                      {itemAnalysisStats.skipped > 0 && (
+                        <span className="text-yellow-600 dark:text-yellow-500">
+                          {' '}({itemAnalysisStats.skipped} skipped due to missing values)
+                        </span>
+                      )}
+                    </p>
                   )}
-                  <span className={csvDetection.format === 'UNKNOWN' ? 'text-yellow-600' : 'text-green-600'}>
-                    {csvDetection.format === 'UNKNOWN' 
-                      ? 'Unknown format - mapping required' 
-                      : 'Format: auto-detected'}
-                  </span>
                 </div>
               )}
             </div>
@@ -437,7 +588,131 @@ export function UncodingTab() {
         </Card>
       )}
 
-      {answersData.length > 0 && itemAnalysisData.length > 0 && !showMappingUI && (
+      {/* Code Mapping UI */}
+      {showCodeMappingUI && answersData.length > 0 && itemAnalysisData.length > 0 && !showMappingUI && (
+        <Card className="border-2 border-orange-500/50">
+          <CardHeader className="bg-orange-50/50 dark:bg-orange-950/20">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="h-6 w-6 text-orange-600 mt-0.5" />
+              <div className="flex-1">
+                <CardTitle className="text-orange-900 dark:text-orange-100">Code Mismatch Detected</CardTitle>
+                <CardDescription className="text-orange-700 dark:text-orange-300">
+                  The version codes don't match between the answers file and item analysis CSV.
+                  Review and adjust the suggested mapping below.
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-6 pt-6">
+            {/* Warning if counts don't match */}
+            {usedCodes.length !== itemAnalysisCodes.length && (
+              <Alert className="border-yellow-500/50 bg-yellow-50 dark:bg-yellow-950/20">
+                <AlertCircle className="h-4 w-4 text-yellow-600" />
+                <AlertTitle className="text-yellow-900 dark:text-yellow-100">Warning: Count Mismatch</AlertTitle>
+                <AlertDescription className="text-yellow-800 dark:text-yellow-200">
+                  Answers file has <strong>{usedCodes.length}</strong> code(s), but item analysis has <strong>{itemAnalysisCodes.length}</strong> code(s).
+                  {usedCodes.length > itemAnalysisCodes.length
+                    ? ' Some answer codes will not be mapped.'
+                    : ' Some item analysis codes will not be used.'}
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {/* Mapping Table */}
+            <div className="space-y-3">
+              <h3 className="font-semibold text-lg">Suggested Code Mapping (by sort order):</h3>
+              <div className="border-2 rounded-lg overflow-hidden">
+                <table className="w-full">
+                  <thead className="bg-slate-100 dark:bg-slate-800">
+                    <tr>
+                      <th className="px-4 py-3 text-left font-bold">Answers File Code</th>
+                      <th className="px-4 py-3 text-center font-bold">→</th>
+                      <th className="px-4 py-3 text-left font-bold">Item Analysis Code</th>
+                      <th className="px-4 py-3 text-right font-bold">Students</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {usedCodes.map((answerCode, idx) => {
+                      const studentCount = answersData.filter(
+                        row => row.Code === answerCode && !isSolutionRow(row)
+                      ).length;
+
+                      return (
+                        <tr key={answerCode} className="border-t hover:bg-slate-50 dark:hover:bg-slate-900/50">
+                          <td className="px-4 py-3">
+                            <span className="px-3 py-1 bg-blue-100 dark:bg-blue-900 rounded font-bold text-lg">
+                              {answerCode}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-center text-xl">→</td>
+                          <td className="px-4 py-3">
+                            <select
+                              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                              value={codeMapping[answerCode] || ''}
+                              onChange={(e) => setCodeMapping({ ...codeMapping, [answerCode]: e.target.value })}
+                            >
+                              <option value="">-- Not Mapped --</option>
+                              {itemAnalysisCodes.map((itemCode) => (
+                                <option key={itemCode} value={itemCode}>{itemCode}</option>
+                              ))}
+                            </select>
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <span className="text-sm text-slate-600 dark:text-slate-400">
+                              {studentCount} {studentCount === 1 ? 'student' : 'students'}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Critical Warning */}
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>CRITICAL WARNING</AlertTitle>
+              <AlertDescription>
+                Incorrect code mapping will produce <strong>WRONG GRADES</strong> for all students.
+                Please verify that these codes represent the same exam versions before proceeding.
+                <br /><br />
+                Double-check:
+                <ul className="list-disc ml-5 mt-2">
+                  <li>Code mappings match the actual exam versions</li>
+                  <li>Student counts make sense for each version</li>
+                  <li>Both files are from the same exam session</li>
+                </ul>
+              </AlertDescription>
+            </Alert>
+
+            <div className="flex items-center gap-4 pt-4 border-t">
+              <Button
+                onClick={() => setShowCodeMappingUI(false)}
+                size="lg"
+                className="bg-green-600 hover:bg-green-700"
+              >
+                <CheckCircle2 className="mr-2 h-4 w-4" />
+                Accept Mapping & Continue
+              </Button>
+              <Button
+                onClick={() => {
+                  setShowCodeMappingUI(false);
+                  setCodeMapping({});
+                  setItemAnalysisFile(null);
+                  setItemAnalysisData([]);
+                }}
+                variant="outline"
+              >
+                Cancel & Re-upload Files
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {answersData.length > 0 && itemAnalysisData.length > 0 && !showMappingUI && !showCodeMappingUI && (
         <Card>
           <CardHeader>
             <CardTitle>Compute Master-Order Averages</CardTitle>

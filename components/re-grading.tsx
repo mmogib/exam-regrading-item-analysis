@@ -24,6 +24,7 @@ import {
   validateExamDataFormat
 } from '@/lib/excel-utils';
 import { ExamRow, CorrectAnswersMap, StudentResult, ANS_CHOICES, AnswerChoice } from '@/types/exam';
+import { error as logError } from '@/lib/logger';
 
 export function RegradingTab() {
   const [file, setFile] = useState<File | null>(null);
@@ -80,7 +81,7 @@ export function RegradingTab() {
       setResults([]);
       setRevisedData([]);
     } catch (error: any) {
-      console.error('Error reading file:', error);
+      logError('Error reading file:', error);
       // Display validation errors or generic error message
       const errorMessage = error.message || 'Error reading file. Please check the format and try again.';
       setError(`File format validation failed:\n\n${errorMessage}\n\nPlease check the template and format requirements.`);
@@ -127,7 +128,7 @@ export function RegradingTab() {
       setResults(studentResults);
       setRevisedData(revisedImport);
     } catch (error) {
-      console.error('Error computing results:', error);
+      logError('Error computing results:', error);
       setError('Error computing results. Please try again.');
     } finally {
       setLoading(false);
@@ -205,6 +206,10 @@ export function RegradingTab() {
 
           {file && (
             <div className="space-y-4">
+              <p className="text-xs text-muted-foreground">
+                ✓ Loaded: {file.name}
+              </p>
+
               <div className="flex items-center gap-4">
                 <Label htmlFor="num-questions">Number of questions in the exam:</Label>
                 <Input

@@ -15,6 +15,7 @@ import {
   CSVDetectionResult,
   ColumnMapping
 } from '@/types/exam';
+import { debug, error as logError } from './logger';
 
 /**
  * Read Excel file and convert to ExamRow array
@@ -246,7 +247,7 @@ function detectCSVFormat(data: any[]): CSVDetectionResult {
   const firstRow = data[0];
   const columns = Object.keys(firstRow);
 
-  console.log('DEBUG - Detected columns:', columns);
+  debug('Detected columns:', columns);
 
   // Check for NEW format
   const hasNewFormat = columns.some(col => 
@@ -263,16 +264,16 @@ function detectCSVFormat(data: any[]): CSVDetectionResult {
   );
 
   let format: 'OLD' | 'NEW' | 'UNKNOWN';
-  
+
   if (hasNewFormat) {
     format = 'NEW';
-    console.log('DEBUG - Detected NEW format');
+    debug('Detected NEW format');
   } else if (hasOldFormat) {
     format = 'OLD';
-    console.log('DEBUG - Detected OLD format');
+    debug('Detected OLD format');
   } else {
     format = 'UNKNOWN';
-    console.log('DEBUG - Unknown format, manual mapping needed');
+    debug('Unknown format, manual mapping needed');
   }
 
   return { format, columns, data };
@@ -322,12 +323,12 @@ function normalizeImportData(data: any[]): ExamRow[] {
  * EXPORTED for use in uncoding component
  */
 export function normalizeItemAnalysis(
-  data: any[], 
+  data: any[],
   format: 'OLD' | 'NEW' = 'NEW',
   customMapping?: ColumnMapping
 ): ItemAnalysisRow[] {
-  console.log('DEBUG - Normalizing with format:', format);
-  console.log('DEBUG - Custom mapping:', customMapping);
+  debug('Normalizing with format:', format);
+  debug('Custom mapping:', customMapping);
   
   const normalized = data.map(row => {
     let codeRaw, orderRaw, orderInMasterRaw;
@@ -358,8 +359,8 @@ export function normalizeItemAnalysis(
     return { code, order, order_in_master: orderInMaster };
   }).filter(row => !isNaN(row.code) && !isNaN(row.order) && !isNaN(row.order_in_master));
 
-  console.log('DEBUG - Normalized rows:', normalized.length);
-  console.log('DEBUG - Sample:', normalized.slice(0, 3));
+  debug('Normalized rows:', normalized.length);
+  debug('Sample:', normalized.slice(0, 3));
   
   return normalized;
 }
@@ -634,9 +635,9 @@ export function computeAverageResults(
     students.map(s => parseInt(s.Code)).filter(c => !isNaN(c))
   ));
 
-  console.log('DEBUG - Used codes from answers:', usedCodes);
-  console.log('DEBUG - Item analysis data sample:', itemAnalysisData.slice(0, 5));
-  console.log('DEBUG - Number of questions:', numQuestions);
+  debug('Used codes from answers:', usedCodes);
+  debug('Item analysis data sample:', itemAnalysisData.slice(0, 5));
+  debug('Number of questions:', numQuestions);
 
   // Build correct answers sets per code
   const correctSets: { [code: string]: AnswerChoice[][] } = {};
@@ -654,8 +655,8 @@ export function computeAverageResults(
           ia.order_in_master >= 1
   );
 
-  console.log('DEBUG - Filtered item analysis rows:', iaUsed.length);
-  console.log('DEBUG - Item analysis sample after filter:', iaUsed.slice(0, 10));
+  debug('Filtered item analysis rows:', iaUsed.length);
+  debug('Item analysis sample after filter:', iaUsed.slice(0, 10));
 
   if (iaUsed.length === 0) {
     const availableCodes = Array.from(new Set(itemAnalysisData.map(ia => ia.code)));
@@ -710,7 +711,7 @@ export function computeAverageResults(
     });
   });
 
-  console.log('DEBUG - Total mapped answers:', mappedAnswers.length);
+  debug('Total mapped answers:', mappedAnswers.length);
 
   // Calculate averages per master question and per code
   const masterQuestionScores: { [masterQ: number]: number[] } = {};
