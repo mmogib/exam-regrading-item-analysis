@@ -92,8 +92,7 @@ export function UploadHelpDialog() {
                       then question numbers (1, 2, 3, ...)
                     </li>
                     <li>
-                      • <strong>Solution rows:</strong> Optional, leave empty or
-                      use "0"
+                      • <strong>Solution rows:</strong> ID is required (use "0" or "000000000"), Section is optional
                     </li>
                     <li>
                       • <strong>Code column:</strong> Can be numeric (001, 002)

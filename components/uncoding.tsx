@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Upload, Download, Calculator, AlertCircle, CheckCircle2, X } from 'lucide-react';
+import { CrossVersionHelpDialog } from './cross-version-help-dialog';
 import {
   readExcelFile,
   readCSVFileWithDetection,
@@ -205,11 +206,16 @@ export function UncodingTab() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Upload Files</CardTitle>
-          <CardDescription>
-            Upload both the answer sheet (<code className="text-xs bg-muted px-1 py-0.5 rounded">import_test_data.xls/.xlsx</code> or revised)
-            and the <code className="text-xs bg-muted px-1 py-0.5 rounded">item_analysis.csv</code>
-          </CardDescription>
+          <div className="flex items-start justify-between">
+            <div className="space-y-1.5">
+              <CardTitle>Upload Files</CardTitle>
+              <CardDescription>
+                Upload both the answer sheet (<code className="text-xs bg-muted px-1 py-0.5 rounded">import_test_data.xls/.xlsx</code> or revised)
+                and the <code className="text-xs bg-muted px-1 py-0.5 rounded">item_analysis.csv</code>
+              </CardDescription>
+            </div>
+            <CrossVersionHelpDialog />
+          </div>
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="grid gap-6 md:grid-cols-2">
