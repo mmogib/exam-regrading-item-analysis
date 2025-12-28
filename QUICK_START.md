@@ -34,6 +34,10 @@ This is a **complete, ready-to-deploy** Next.js application that converts your R
 - ✅ **Type-safe**: Full TypeScript support
 - ✅ **Static export**: Ready for Netlify deployment
 - ✅ **Responsive**: Works on all devices
+- ✅ **Alphanumeric codes**: Supports V1, A, 002, etc.
+- ✅ **File re-upload**: Modify and re-upload files seamlessly
+- ✅ **Position mapping**: See question positions across versions
+- ✅ **Configurable filenames**: Customize via JSON config
 
 ## 🎨 What's Included
 
@@ -47,7 +51,11 @@ exam-grading-app/
 ├── components/            # React components
 │   ├── ui/               # shadcn/ui components (Button, Card, Table, etc.)
 │   ├── re-grading.tsx    # Re-grading module (complete)
-│   └── uncoding.tsx      # Uncoding module (complete)
+│   └── uncoding.tsx      # Cross-version analysis module (complete)
+│
+├── config/               # Configuration
+│   ├── downloads.json    # Download filename configuration
+│   └── downloads.ts      # Type-safe config loader
 │
 ├── lib/                   # Utility functions
 │   ├── utils.ts          # cn() function for class merging
@@ -78,11 +86,13 @@ exam-grading-app/
 4. Click "Re-grade Exam"
 5. Download revised files
 
-### Uncoding Tab
+### Cross-Version Analysis Tab
 1. Upload answers file and `item_analysis.csv`
 2. Set number of questions
 3. Click "Compute Averages"
-4. Download `average_results.xlsx`
+4. Download statistics files:
+   - `master-question-statistics.xlsx` - Per master question stats
+   - `exam-version-statistics.xlsx` - Per version stats
 
 ## 🚢 Deploying to Netlify
 

@@ -25,6 +25,7 @@ import {
 } from '@/lib/excel-utils';
 import { ExamRow, CorrectAnswersMap, StudentResult, ANS_CHOICES, AnswerChoice } from '@/types/exam';
 import { error as logError } from '@/lib/logger';
+import { DOWNLOAD_FILENAMES } from '@/config/downloads';
 
 // Helper function to format file size
 const formatFileSize = (bytes: number): string => {
@@ -154,12 +155,12 @@ export function RegradingTab() {
 
   const downloadImportRevised = () => {
     if (revisedData.length === 0) return;
-    exportToExcel(revisedData, 'import_test_data_revised.xlsx', 'import_test_data', data);
+    exportToExcel(revisedData, DOWNLOAD_FILENAMES.reGrading.examDataRevised, 'import_test_data', data);
   };
 
   const downloadResultsRevised = () => {
     if (results.length === 0) return;
-    exportToExcel(results, 'results_id_export_revised.xlsx', 'results_id_export');
+    exportToExcel(results, DOWNLOAD_FILENAMES.reGrading.studentResults, 'results_id_export');
   };
 
   return (
@@ -401,7 +402,7 @@ export function RegradingTab() {
                     </p>
                     <Button onClick={downloadImportRevised} className="w-full bg-blue-600 hover:bg-blue-700">
                       <Download className="mr-2 h-4 w-4" />
-                      import_test_data_revised.xlsx
+                      {DOWNLOAD_FILENAMES.reGrading.examDataRevised}
                     </Button>
                   </div>
                 </div>
@@ -422,7 +423,7 @@ export function RegradingTab() {
                     </p>
                     <Button onClick={downloadResultsRevised} className="w-full bg-purple-600 hover:bg-purple-700">
                       <Download className="mr-2 h-4 w-4" />
-                      results_id_export_revised.xlsx
+                      {DOWNLOAD_FILENAMES.reGrading.studentResults}
                     </Button>
                   </div>
                 </div>

@@ -11,10 +11,12 @@ A modern, client-side web application for re-grading MCQ-based exams and perform
 - Automatic grading calculation (5 points per correct answer)
 - Download revised answer sheets and results
 
-### Uncoding Module
+### Cross-Version Analysis Module
 - Map student answers to master question order
 - Calculate average scores per master question
+- Position mapping showing which question appears where in each version
 - Support for multi-correct answers from solution rows
+- Support for alphanumeric exam codes (V1, A, 002, etc.)
 - Generate comprehensive item analysis reports
 
 ## Tech Stack
@@ -83,16 +85,17 @@ netlify deploy --prod --dir=out
   - Solution rows: `ID = 000000000`, `Section = 00`
   
 - **Output**:
-  - `import_test_data_revised.xlsx`: Updated answer sheet with revised solutions
-  - `results_id_export_revised.xlsx`: Student results with totals and percentages
+  - `exam-data-regraded.xlsx`: Updated answer sheet with revised solutions
+  - `student-grades.xlsx`: Student results with totals and percentages
 
-### Uncoding
+### Cross-Version Analysis
 - **Input**:
-  - `import_test_data.xls/.xlsx`: Same format as re-grading
-  - `item_analysis.csv`: Columns `code`, `order`, `order_in_master`
-  
+  - Answers file (.xls/.xlsx): Same format as re-grading
+  - `item_analysis.csv`: Maps question positions across versions (supports multiple CSV formats)
+
 - **Output**:
-  - `average_results.xlsx`: Average % correct per master question
+  - `master-question-statistics.xlsx`: Average % correct per master question with position mapping
+  - `exam-version-statistics.xlsx`: Performance statistics per exam version
 
 ## Usage
 
@@ -103,11 +106,13 @@ netlify deploy --prod --dir=out
 4. Click "Re-grade Exam"
 5. Download the revised files
 
-### Uncoding Workflow
+### Cross-Version Analysis Workflow
 1. Upload both the answers file and `item_analysis.csv`
 2. Set the number of questions (master order)
 3. Click "Compute Averages"
-4. Download the `average_results.xlsx` file
+4. Download the statistics files:
+   - `master-question-statistics.xlsx`: Per master question stats with position mapping
+   - `exam-version-statistics.xlsx`: Per exam version stats
 
 ## Key Features
 
@@ -117,6 +122,42 @@ netlify deploy --prod --dir=out
 - ✅ **Export to Excel**: Download results in standard Excel format
 - ✅ **Responsive design**: Works on desktop and mobile devices
 - ✅ **Modern UI**: Clean, professional interface with shadcn/ui
+
+## Recent Updates
+
+### Position Mapping
+- See which question number corresponds to each master question in each exam version
+- Example: Master Q1 might be Q7 in Version A, Q12 in Version B
+- Position info shown in both UI tables and Excel exports
+
+### Alphanumeric Code Support
+- Supports numeric codes: 1, 2, 001, 002
+- Supports alphanumeric codes: V1, V2, A, B, Version-A
+- Automatic detection and handling
+
+### File Re-upload
+- Modify uploaded files locally and re-upload seamlessly
+- File metadata (size, timestamp) displayed for tracking
+- No need to refresh page or restart
+
+### Configurable Filenames
+Download filenames are configurable via `config/downloads.json`:
+```json
+{
+  "crossVersionAnalysis": {
+    "masterQuestionStats": "master-question-statistics.xlsx",
+    "examVersionStats": "exam-version-statistics.xlsx"
+  },
+  "reGrading": {
+    "examDataRevised": "exam-data-regraded.xlsx",
+    "studentResults": "student-grades.xlsx"
+  },
+  "templates": {
+    "examDataTemplate": "exam-data-template.xlsx"
+  }
+}
+```
+Simply edit and rebuild - no code changes needed!
 
 ## Development
 
@@ -130,7 +171,10 @@ exam-grading-app/
 ├── components/
 │   ├── ui/                 # shadcn/ui components
 │   ├── re-grading.tsx      # Re-grading module
-│   └── uncoding.tsx        # Uncoding module
+│   └── uncoding.tsx        # Cross-version analysis module
+├── config/
+│   ├── downloads.json      # Download filename configuration
+│   └── downloads.ts        # Type-safe config loader
 ├── lib/
 │   ├── utils.ts            # Utility functions
 │   └── excel-utils.ts      # Excel processing logic

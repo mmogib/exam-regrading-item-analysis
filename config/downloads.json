@@ -1,0 +1,13 @@
+{
+  "crossVersionAnalysis": {
+    "masterQuestionStats": "master-question-statistics.xlsx",
+    "examVersionStats": "exam-version-statistics.xlsx"
+  },
+  "reGrading": {
+    "examDataRevised": "exam-data-regraded.xlsx",
+    "studentResults": "student-grades.xlsx"
+  },
+  "templates": {
+    "examDataTemplate": "exam-data-template.xlsx"
+  }
+}

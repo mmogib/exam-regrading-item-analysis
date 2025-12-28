@@ -22,6 +22,7 @@ import {
   isSolutionRow
 } from '@/lib/excel-utils';
 import { debug, error as logError } from '@/lib/logger';
+import { DOWNLOAD_FILENAMES } from '@/config/downloads';
 import {
   ExamRow,
   ItemAnalysisRow,
@@ -334,12 +335,12 @@ export function UncodingTab() {
       return flattened;
     });
 
-    exportToExcel(flattenedResults, 'average_results.xlsx', 'average_results');
+    exportToExcel(flattenedResults, DOWNLOAD_FILENAMES.crossVersionAnalysis.masterQuestionStats, 'average_results');
   };
 
   const downloadCodeAverages = () => {
     if (codeAverages.length === 0) return;
-    exportToExcel(codeAverages, 'code_averages.xlsx', 'code_averages');
+    exportToExcel(codeAverages, DOWNLOAD_FILENAMES.crossVersionAnalysis.examVersionStats, 'code_averages');
   };
 
   return (
@@ -761,7 +762,7 @@ export function UncodingTab() {
             <CardContent className="space-y-4 pt-6">
               <Button onClick={downloadAverageResults} className="bg-purple-600 hover:bg-purple-700">
                 <Download className="mr-2 h-4 w-4" />
-                Download average_results.xlsx
+                Download {DOWNLOAD_FILENAMES.crossVersionAnalysis.masterQuestionStats}
               </Button>
 
               <div className="border-2 rounded-lg overflow-hidden overflow-x-auto">
@@ -843,7 +844,7 @@ export function UncodingTab() {
               <CardContent className="space-y-4 pt-6">
                 <Button onClick={downloadCodeAverages} className="bg-blue-600 hover:bg-blue-700">
                   <Download className="mr-2 h-4 w-4" />
-                  Download code_averages.xlsx
+                  Download {DOWNLOAD_FILENAMES.crossVersionAnalysis.examVersionStats}
                 </Button>
 
                 <div className="border-2 rounded-lg overflow-hidden">

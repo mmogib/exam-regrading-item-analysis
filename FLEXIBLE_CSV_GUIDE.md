@@ -71,7 +71,7 @@ exam_code,question_num,master_num
 
 | Required Field | What It Is | Example Values |
 |---------------|------------|----------------|
-| **Code / Version** | Exam version number | 1, 2, 3, 4, etc. |
+| **Code / Version** | Exam version number or code | 1, 2, V1, A, 002, etc. |
 | **Question Order** | Question position in that version | 1-14 (for a 14-question exam) |
 | **Master Question #** | Master question number | 1-14 (master order) |
 

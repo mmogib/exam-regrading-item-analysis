@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx';
+import { DOWNLOAD_FILENAMES } from '@/config/downloads';
 
 /**
  * Generate exam data template Excel file
@@ -102,7 +103,7 @@ export function generateExamTemplate(): void {
   const url = window.URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = 'exam_data_template.xlsx';
+  link.download = DOWNLOAD_FILENAMES.templates.examDataTemplate;
   link.click();
   window.URL.revokeObjectURL(url);
 }
