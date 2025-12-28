@@ -1,7 +1,8 @@
 {
   "crossVersionAnalysis": {
     "masterQuestionStats": "master-question-statistics.xlsx",
-    "examVersionStats": "exam-version-statistics.xlsx"
+    "examVersionStats": "exam-version-statistics.xlsx",
+    "distractorAnalysis": "distractor-analysis.xlsx"
   },
   "reGrading": {
     "examDataRevised": "exam-data-regraded.xlsx",

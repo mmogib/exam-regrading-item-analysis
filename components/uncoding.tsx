@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Upload, Download, Calculator, AlertCircle, CheckCircle2, X } from 'lucide-react';
 import { CrossVersionHelpDialog } from './cross-version-help-dialog';
 import {
@@ -14,8 +15,13 @@ import {
   readCSVFileWithDetection,
   getAllQuestionCols,
   guessNumQuestions,
+  computeResults,
   computeAverageResults,
   computeCodeAverages,
+  classifyStudentsByQuartile,
+  validateCorrectAnswers,
+  computeDistractorAnalysis,
+  buildCorrectAnswersMap,
   exportToExcel,
   parseCSVWithMapping,
   normalizeItemAnalysis,
@@ -28,6 +34,7 @@ import {
   ItemAnalysisRow,
   AverageResult,
   CodeAverageResult,
+  DistractorAnalysisResult,
   SOLUTION_ID,
   SOLUTION_SECTION,
   CSVDetectionResult,
@@ -76,6 +83,11 @@ export function UncodingTab() {
 
   // Item analysis processing stats
   const [itemAnalysisStats, setItemAnalysisStats] = useState<{total: number, valid: number, skipped: number} | null>(null);
+
+  // Distractor analysis states
+  const [distractorResults, setDistractorResults] = useState<DistractorAnalysisResult[]>([]);
+  const [hasPermutation, setHasPermutation] = useState(false);
+  const [warning, setWarning] = useState<string | null>(null);
 
   // Helper function to detect code mismatch and suggest mapping
   const checkCodeMismatch = (answerCodes: string[], itemCodes: string[]) => {
@@ -206,6 +218,15 @@ export function UncodingTab() {
         setItemAnalysisStats({ total: totalRows, valid: validRows, skipped: skippedRows });
         setShowMappingUI(false);
 
+        // Check if permutation data exists
+        const hasPerm = parsedData.some(ia => ia.permutation);
+        setHasPermutation(hasPerm);
+        if (!hasPerm) {
+          setWarning('Item analysis file does not contain permutation data. Distractor analysis will not be available.');
+        } else {
+          setWarning(null);
+        }
+
         // Check for code mismatch if answers file is already loaded
         if (usedCodes.length > 0) {
           // Convert all codes to strings for comparison
@@ -250,6 +271,15 @@ export function UncodingTab() {
       setItemAnalysisData(parsedData);
       setItemAnalysisStats({ total: totalRows, valid: validRows, skipped: skippedRows });
       setShowMappingUI(false);
+
+      // Check if permutation data exists
+      const hasPerm = parsedData.some(ia => ia.permutation);
+      setHasPermutation(hasPerm);
+      if (!hasPerm) {
+        setWarning('Item analysis file does not contain permutation data. Distractor analysis will not be available.');
+      } else {
+        setWarning(null);
+      }
 
       // Check for code mismatch if answers file is already loaded
       if (usedCodes.length > 0) {
@@ -303,6 +333,37 @@ export function UncodingTab() {
       const codeResults = computeCodeAverages(answersData, mappedItemAnalysis, numQuestions);
       setAverageResults(results);
       setCodeAverages(codeResults);
+
+      // Compute distractor analysis if permutation data exists
+      if (hasPermutation) {
+        try {
+          // Validate correct answers first
+          const validationError = validateCorrectAnswers(mappedItemAnalysis, answersData);
+          if (validationError) {
+            setError(validationError);
+            setDistractorResults([]);
+            return;
+          }
+
+          // Get student results with scores
+          const qCols = getAllQuestionCols(answersData).slice(0, numQuestions);
+          const correctMap = buildCorrectAnswersMap(answersData, qCols);
+          const studentResults = computeResults(answersData, qCols, correctMap);
+
+          // Classify students into quartiles
+          const rankedStudents = classifyStudentsByQuartile(studentResults);
+
+          // Compute distractor analysis
+          const distractorAnalysis = computeDistractorAnalysis(answersData, mappedItemAnalysis, rankedStudents);
+          setDistractorResults(distractorAnalysis);
+        } catch (distractorError: any) {
+          logError('Error computing distractor analysis:', distractorError);
+          setError(`Error computing distractor analysis: ${distractorError.message}`);
+          setDistractorResults([]);
+        }
+      } else {
+        setDistractorResults([]);
+      }
     } catch (error: any) {
       logError('Error computing averages:', error);
       setError(error.message || 'Error computing averages. Please try again.');
@@ -343,6 +404,26 @@ export function UncodingTab() {
     exportToExcel(codeAverages, DOWNLOAD_FILENAMES.crossVersionAnalysis.examVersionStats, 'code_averages');
   };
 
+  const downloadDistractorAnalysis = () => {
+    if (distractorResults.length === 0) return;
+
+    // Flatten distractor results for Excel export
+    const flattenedResults = distractorResults.flatMap(result =>
+      result.choices.map(choice => ({
+        'Master Question': result.masterQuestion,
+        'Choice': choice.isCorrect ? `${choice.choice}*` : choice.choice,
+        'Count': choice.count,
+        'Percentage': `${choice.percentage}%`,
+        'TOP 25%': choice.T1,
+        'SECOND 25%': choice.T2,
+        'THIRD 25%': choice.T3,
+        'BOTTOM 25%': choice.T4
+      }))
+    );
+
+    exportToExcel(flattenedResults, DOWNLOAD_FILENAMES.crossVersionAnalysis.distractorAnalysis, 'distractor_analysis');
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
       {error && (
@@ -355,6 +436,22 @@ export function UncodingTab() {
             size="sm"
             className="absolute right-2 top-2 h-6 w-6 p-0"
             onClick={() => setError(null)}
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </Alert>
+      )}
+
+      {warning && (
+        <Alert className="relative border-yellow-200 bg-yellow-50 text-yellow-900 dark:border-yellow-800 dark:bg-yellow-900/10 dark:text-yellow-200">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Warning</AlertTitle>
+          <AlertDescription>{warning}</AlertDescription>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="absolute right-2 top-2 h-6 w-6 p-0"
+            onClick={() => setWarning(null)}
           >
             <X className="h-4 w-4" />
           </Button>
@@ -743,7 +840,7 @@ export function UncodingTab() {
           <CardContent>
             <Button onClick={handleCompute} disabled={loading} size="lg">
               <Calculator className="mr-2 h-4 w-4" />
-              Compute Averages
+              Compute
             </Button>
           </CardContent>
         </Card>
@@ -831,6 +928,71 @@ export function UncodingTab() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Distractor Analysis */}
+          {distractorResults.length > 0 && (
+            <Card className="border-2 border-orange-200 dark:border-orange-800">
+              <CardHeader className="bg-orange-50 dark:bg-orange-950/30">
+                <CardTitle className="text-orange-900 dark:text-orange-100">Distractor Analysis</CardTitle>
+                <CardDescription className="text-orange-700 dark:text-orange-300">
+                  Analysis of answer choices selected by students in each quartile. Asterisk (*) indicates the correct answer.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4 pt-6">
+                <Button onClick={downloadDistractorAnalysis} className="bg-orange-600 hover:bg-orange-700">
+                  <Download className="mr-2 h-4 w-4" />
+                  Download {DOWNLOAD_FILENAMES.crossVersionAnalysis.distractorAnalysis}
+                </Button>
+
+                <Accordion type="single" collapsible className="w-full">
+                  {distractorResults.map((result) => (
+                    <AccordionItem key={result.masterQuestion} value={`q-${result.masterQuestion}`}>
+                      <AccordionTrigger className="hover:bg-orange-50 dark:hover:bg-orange-950/20 px-4">
+                        <span className="font-semibold">Master Question {result.masterQuestion}</span>
+                      </AccordionTrigger>
+                      <AccordionContent className="px-4 pt-2">
+                        <div className="border-2 rounded-lg overflow-hidden">
+                          <Table>
+                            <TableHeader className="bg-slate-100 dark:bg-slate-800">
+                              <TableRow>
+                                <TableHead className="font-bold">Choice</TableHead>
+                                <TableHead className="text-right font-bold">Count</TableHead>
+                                <TableHead className="text-right font-bold">Percentage</TableHead>
+                                <TableHead className="text-right font-bold">TOP 25%</TableHead>
+                                <TableHead className="text-right font-bold">SECOND 25%</TableHead>
+                                <TableHead className="text-right font-bold">THIRD 25%</TableHead>
+                                <TableHead className="text-right font-bold">BOTTOM 25%</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {result.choices.map((choice) => (
+                                <TableRow
+                                  key={choice.choice}
+                                  className={`hover:bg-slate-50 dark:hover:bg-slate-900/50 ${
+                                    choice.isCorrect ? 'bg-green-50 dark:bg-green-950/20' : ''
+                                  }`}
+                                >
+                                  <TableCell className="font-semibold">
+                                    {choice.isCorrect ? `${choice.choice}*` : choice.choice}
+                                  </TableCell>
+                                  <TableCell className="text-right">{choice.count}</TableCell>
+                                  <TableCell className="text-right">{choice.percentage.toFixed(2)}%</TableCell>
+                                  <TableCell className="text-right">{choice.T1}</TableCell>
+                                  <TableCell className="text-right">{choice.T2}</TableCell>
+                                  <TableCell className="text-right">{choice.T3}</TableCell>
+                                  <TableCell className="text-right">{choice.T4}</TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      </AccordionContent>
+                    </AccordionItem>
+                  ))}
+                </Accordion>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Code/Version Statistics */}
           {codeAverages.length > 0 && (

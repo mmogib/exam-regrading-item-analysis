@@ -3,10 +3,13 @@ import { saveAs } from 'file-saver';
 import {
   ExamRow,
   StudentResult,
+  StudentResultWithRank,
   CorrectAnswersMap,
   ItemAnalysisRow,
   AverageResult,
   CodeAverageResult,
+  DistractorAnalysisResult,
+  DistractorChoiceResult,
   SOLUTION_ID,
   SOLUTION_SECTION,
   ANS_CHOICES,
@@ -329,7 +332,7 @@ export function normalizeItemAnalysis(
 ): ItemAnalysisRow[] {
   debug('Normalizing with format:', format);
   debug('Custom mapping:', customMapping);
-  
+
   const normalized = data.map(row => {
     let codeRaw, orderRaw, orderInMasterRaw;
 
@@ -347,10 +350,10 @@ export function normalizeItemAnalysis(
       // OLD FORMAT: code, order, order in master
       codeRaw = row.code || row.Code || row.CODE;
       orderRaw = row.order || row.Order || row.ORDER;
-      orderInMasterRaw = row['order in master'] || row['Order in Master'] || 
+      orderInMasterRaw = row['order in master'] || row['Order in Master'] ||
                          row.order_in_master || row.ORDER_IN_MASTER;
     }
-    
+
     // Parse flexibly - handle strings and numbers
     // For code: try to parse as number, but keep as string if it's alphanumeric
     let code: string | number;
@@ -364,7 +367,33 @@ export function normalizeItemAnalysis(
     const order = typeof orderRaw === 'number' ? orderRaw : parseInt(String(orderRaw));
     const orderInMaster = typeof orderInMasterRaw === 'number' ? orderInMasterRaw : parseInt(String(orderInMasterRaw));
 
-    return { code, order, order_in_master: orderInMaster };
+    // Extract optional fields from QUESTIONS_MAP format
+    const permutationRaw = row.Permutation || row.permutation || row.PERMUTATION;
+    const correctRaw = row.Correct || row.correct || row.CORRECT;
+    const pointsRaw = row.Points || row.points || row.POINTS;
+    const groupRaw = row.Group || row.group || row.GROUP;
+
+    const result: ItemAnalysisRow = { code, order, order_in_master: orderInMaster };
+
+    // Add optional fields if they exist
+    if (permutationRaw !== undefined && permutationRaw !== null && String(permutationRaw).trim() !== '') {
+      result.permutation = String(permutationRaw).trim();
+    }
+    if (correctRaw !== undefined && correctRaw !== null && String(correctRaw).trim() !== '') {
+      result.correct = String(correctRaw).trim();
+    }
+    if (pointsRaw !== undefined && pointsRaw !== null) {
+      const points = typeof pointsRaw === 'number' ? pointsRaw : parseFloat(String(pointsRaw));
+      if (!isNaN(points)) {
+        result.points = points;
+      }
+    }
+    if (groupRaw !== undefined && groupRaw !== null && String(groupRaw).trim() !== '') {
+      const groupNum = parseInt(String(groupRaw));
+      result.group = isNaN(groupNum) ? String(groupRaw).trim() : groupNum;
+    }
+
+    return result;
   }).filter(row => {
     // Filter out rows with missing/invalid data, but allow alphanumeric codes
     const hasValidCode = row.code !== '' && row.code !== null && row.code !== undefined;
@@ -373,7 +402,7 @@ export function normalizeItemAnalysis(
 
   debug('Normalized rows:', normalized.length);
   debug('Sample:', normalized.slice(0, 3));
-  
+
   return normalized;
 }
 
@@ -875,6 +904,235 @@ export function computeCodeAverages(
     return {
       Code: code,
       Average_score: Math.round(avg * 100) / 100
+    };
+  });
+
+  return results;
+}
+
+/**
+ * Classify students into quartiles based on total score
+ * T1 = Top 25%, T2 = Second 25%, T3 = Third 25%, T4 = Bottom 25%
+ * Handles ties at boundaries by assigning to the higher quartile
+ */
+export function classifyStudentsByQuartile(results: StudentResult[]): StudentResultWithRank[] {
+  // Filter out solution rows
+  const students = results.filter(r =>
+    r.ID !== SOLUTION_ID &&
+    r.ID !== '0' &&
+    r.ID.trim() !== ''
+  );
+
+  // Sort by total score descending (highest scores first)
+  const sorted = [...students].sort((a, b) => b.Tot - a.Tot);
+
+  const totalStudents = sorted.length;
+  if (totalStudents === 0) return [];
+
+  // Calculate quartile boundaries
+  const q1End = Math.ceil(totalStudents * 0.25);
+  const q2End = Math.ceil(totalStudents * 0.50);
+  const q3End = Math.ceil(totalStudents * 0.75);
+
+  // Assign ranks with tie handling
+  const ranked: StudentResultWithRank[] = [];
+
+  for (let i = 0; i < sorted.length; i++) {
+    const student = sorted[i];
+    let rank: 'T1' | 'T2' | 'T3' | 'T4';
+
+    // Handle ties at boundaries by checking the score
+    if (i < q1End) {
+      rank = 'T1';
+    } else if (i === q1End && sorted[i].Tot === sorted[q1End - 1].Tot) {
+      // Tie at T1/T2 boundary - assign to T1
+      rank = 'T1';
+    } else if (i < q2End) {
+      rank = 'T2';
+    } else if (i === q2End && sorted[i].Tot === sorted[q2End - 1].Tot) {
+      // Tie at T2/T3 boundary - assign to T2
+      rank = 'T2';
+    } else if (i < q3End) {
+      rank = 'T3';
+    } else if (i === q3End && sorted[i].Tot === sorted[q3End - 1].Tot) {
+      // Tie at T3/T4 boundary - assign to T3
+      rank = 'T3';
+    } else {
+      rank = 'T4';
+    }
+
+    ranked.push({
+      ...student,
+      Rank: rank
+    });
+  }
+
+  return ranked;
+}
+
+/**
+ * Validate that correct answers from QUESTIONS_MAP match solution rows
+ * Returns error message if mismatch found, null otherwise
+ */
+export function validateCorrectAnswers(
+  itemAnalysis: ItemAnalysisRow[],
+  examData: ExamRow[]
+): string | null {
+  // Check if we have permutation data
+  const hasPermutation = itemAnalysis.some(ia => ia.permutation);
+  if (!hasPermutation) {
+    return null; // No validation needed without permutation data
+  }
+
+  // Get solution rows by code
+  const solutionRows: { [code: string]: ExamRow } = {};
+  examData.forEach(row => {
+    if (isSolutionRow(row)) {
+      solutionRows[String(row.Code)] = row;
+    }
+  });
+
+  const errors: string[] = [];
+
+  // For each mapping entry with correct answer
+  itemAnalysis.forEach(ia => {
+    if (!ia.correct) return;
+
+    const code = String(ia.code);
+    const solutionRow = solutionRows[code];
+
+    if (!solutionRow) {
+      errors.push(`Version ${code}: No solution row found`);
+      return;
+    }
+
+    // Get the answer from solution row at the version question position
+    const versionQuestionCol = String(ia.order);
+    const solutionAnswer = solutionRow[versionQuestionCol];
+
+    if (solutionAnswer !== ia.correct) {
+      errors.push(
+        `Version ${code}, Q${ia.order}: QUESTIONS_MAP says '${ia.correct}', solution row has '${solutionAnswer}'`
+      );
+    }
+  });
+
+  if (errors.length > 0) {
+    return `Correct answer mismatch detected:\n${errors.join('\n')}`;
+  }
+
+  return null;
+}
+
+/**
+ * Compute distractor analysis for all master questions
+ */
+export function computeDistractorAnalysis(
+  examData: ExamRow[],
+  itemAnalysis: ItemAnalysisRow[],
+  rankedStudents: StudentResultWithRank[]
+): DistractorAnalysisResult[] {
+  // Check if we have permutation data
+  const hasPermutation = itemAnalysis.some(ia => ia.permutation);
+  if (!hasPermutation) {
+    throw new Error('Distractor analysis requires permutation data in the item analysis file');
+  }
+
+  // Create student rank map for quick lookup
+  const studentRankMap = new Map<string, 'T1' | 'T2' | 'T3' | 'T4'>();
+  rankedStudents.forEach(s => {
+    studentRankMap.set(s.ID, s.Rank);
+  });
+
+  // Get all unique master questions
+  const masterQuestions = Array.from(new Set(itemAnalysis.map(ia => ia.order_in_master))).sort((a, b) => a - b);
+
+  // Helper function to decode permutation
+  const decodePermutation = (studentChoice: string, permutation: string): string => {
+    if (!studentChoice || !permutation) return 'Blank/Other';
+
+    const choices = ['A', 'B', 'C', 'D', 'E'];
+    const choiceIndex = choices.indexOf(studentChoice.toUpperCase());
+
+    if (choiceIndex === -1) return 'Blank/Other';
+
+    const permArray = permutation.toUpperCase().split('');
+    if (choiceIndex >= permArray.length) return 'Blank/Other';
+
+    return permArray[choiceIndex];
+  };
+
+  // Compute distractor analysis for each master question
+  const results: DistractorAnalysisResult[] = masterQuestions.map(masterQ => {
+    // Find all versions/mappings for this master question
+    const mappings = itemAnalysis.filter(ia => ia.order_in_master === masterQ);
+
+    // Determine the correct answer in master terms
+    let masterCorrect: string | null = null;
+    for (const mapping of mappings) {
+      if (mapping.correct && mapping.permutation) {
+        // Find which master option corresponds to the correct answer in this version
+        const choices = ['A', 'B', 'C', 'D', 'E'];
+        const permArray = mapping.permutation.toUpperCase().split('');
+        const correctIndex = choices.indexOf(mapping.correct.toUpperCase());
+        if (correctIndex !== -1 && correctIndex < permArray.length) {
+          masterCorrect = permArray[correctIndex];
+          break;
+        }
+      }
+    }
+
+    // Count choices across all students for this master question
+    const choiceCounts: { [choice: string]: { count: number; T1: number; T2: number; T3: number; T4: number } } = {
+      'A': { count: 0, T1: 0, T2: 0, T3: 0, T4: 0 },
+      'B': { count: 0, T1: 0, T2: 0, T3: 0, T4: 0 },
+      'C': { count: 0, T1: 0, T2: 0, T3: 0, T4: 0 },
+      'D': { count: 0, T1: 0, T2: 0, T3: 0, T4: 0 },
+      'E': { count: 0, T1: 0, T2: 0, T3: 0, T4: 0 },
+      'Blank/Other': { count: 0, T1: 0, T2: 0, T3: 0, T4: 0 }
+    };
+
+    // Process each student's answer
+    const students = examData.filter(row => !isSolutionRow(row));
+    students.forEach(student => {
+      const rank = studentRankMap.get(student.ID);
+      if (!rank) return; // Skip if student not ranked
+
+      // Find which version this student took
+      const studentCode = String(student.Code);
+      const mapping = mappings.find(m => String(m.code) === studentCode);
+      if (!mapping || !mapping.permutation) return;
+
+      // Get student's answer for this question in their version
+      const versionQuestionCol = String(mapping.order);
+      const studentAnswer = student[versionQuestionCol];
+
+      // Decode to master option
+      const masterChoice = decodePermutation(studentAnswer, mapping.permutation);
+
+      // Count the choice
+      choiceCounts[masterChoice].count++;
+      choiceCounts[masterChoice][rank]++;
+    });
+
+    // Calculate total students who answered
+    const totalAnswered = Object.values(choiceCounts).reduce((sum, c) => sum + c.count, 0);
+
+    // Convert to result format
+    const choices: DistractorChoiceResult[] = ['A', 'B', 'C', 'D', 'E', 'Blank/Other'].map(choice => ({
+      choice,
+      isCorrect: choice === masterCorrect,
+      count: choiceCounts[choice].count,
+      percentage: totalAnswered > 0 ? Math.round((choiceCounts[choice].count / totalAnswered) * 10000) / 100 : 0,
+      T1: choiceCounts[choice].T1,
+      T2: choiceCounts[choice].T2,
+      T3: choiceCounts[choice].T3,
+      T4: choiceCounts[choice].T4
+    }));
+
+    return {
+      masterQuestion: masterQ,
+      choices
     };
   });
 

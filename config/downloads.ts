@@ -9,6 +9,7 @@ export interface DownloadConfig {
   crossVersionAnalysis: {
     masterQuestionStats: string;
     examVersionStats: string;
+    distractorAnalysis: string;
   };
   reGrading: {
     examDataRevised: string;
