@@ -33,9 +33,23 @@ import {
   ColumnMapping
 } from '@/types/exam';
 
+// Helper function to format file size
+const formatFileSize = (bytes: number): string => {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+// Helper function to format timestamp
+const formatTimestamp = (date: Date): string => {
+  return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+};
+
 export function UncodingTab() {
   const [answersFile, setAnswersFile] = useState<File | null>(null);
   const [itemAnalysisFile, setItemAnalysisFile] = useState<File | null>(null);
+  const [answersFileMetadata, setAnswersFileMetadata] = useState<{size: number, timestamp: Date} | null>(null);
+  const [itemAnalysisFileMetadata, setItemAnalysisFileMetadata] = useState<{size: number, timestamp: Date} | null>(null);
   const [answersData, setAnswersData] = useState<ExamRow[]>([]);
   const [itemAnalysisData, setItemAnalysisData] = useState<ItemAnalysisRow[]>([]);
   const [numQuestions, setNumQuestions] = useState<number>(0);
@@ -116,10 +130,14 @@ export function UncodingTab() {
       const codes = Array.from(new Set(students.map(s => s.Code))).sort();
 
       setAnswersFile(uploadedFile);
+      setAnswersFileMetadata({ size: uploadedFile.size, timestamp: new Date() });
       setAnswersData(examData);
       setNumQuestions(guessedNum);
       setUsedCodes(codes);
       setAverageResults([]);
+
+      // Clear the input to allow re-selecting the same file
+      e.target.value = '';
 
       // Check for code mismatch if item analysis is already loaded
       if (itemAnalysisData.length > 0) {
@@ -152,7 +170,11 @@ export function UncodingTab() {
       const detection = await readCSVFileWithDetection(uploadedFile);
       setCsvDetection(detection);
       setItemAnalysisFile(uploadedFile);
+      setItemAnalysisFileMetadata({ size: uploadedFile.size, timestamp: new Date() });
       setAverageResults([]);
+
+      // Clear the input to allow re-selecting the same file
+      e.target.value = '';
 
       if (detection.format === 'UNKNOWN') {
         // Show mapping UI
@@ -174,6 +196,7 @@ export function UncodingTab() {
         if (validRows === 0) {
           setError(`No valid rows found in item analysis CSV.\n\nAll ${totalRows} rows were skipped due to missing or invalid values.\n\nPlease check that your CSV has valid data in the code, order, and master question columns.`);
           setItemAnalysisFile(null);
+          setItemAnalysisFileMetadata(null);
           setCsvDetection(null);
           return;
         }
@@ -363,9 +386,9 @@ export function UncodingTab() {
                 />
                 <Upload className="h-5 w-5 text-muted-foreground shrink-0" />
               </div>
-              {answersFile && (
+              {answersFile && answersFileMetadata && (
                 <p className="text-xs text-muted-foreground">
-                  ✓ Loaded: {answersFile.name}
+                  ✓ Loaded: {answersFile.name} ({formatFileSize(answersFileMetadata.size)}) at {formatTimestamp(answersFileMetadata.timestamp)}
                 </p>
               )}
             </div>
@@ -385,7 +408,7 @@ export function UncodingTab() {
               {itemAnalysisFile && csvDetection && (
                 <div className="space-y-1">
                   <p className="text-xs text-muted-foreground">
-                    ✓ Loaded: {itemAnalysisFile.name}
+                    ✓ Loaded: {itemAnalysisFile.name} {itemAnalysisFileMetadata && `(${formatFileSize(itemAnalysisFileMetadata.size)}) at ${formatTimestamp(itemAnalysisFileMetadata.timestamp)}`}
                   </p>
                   <div className="flex items-center gap-2 text-xs">
                     {csvDetection.format === 'UNKNOWN' ? (

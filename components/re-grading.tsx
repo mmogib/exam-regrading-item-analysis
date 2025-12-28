@@ -26,8 +26,21 @@ import {
 import { ExamRow, CorrectAnswersMap, StudentResult, ANS_CHOICES, AnswerChoice } from '@/types/exam';
 import { error as logError } from '@/lib/logger';
 
+// Helper function to format file size
+const formatFileSize = (bytes: number): string => {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+// Helper function to format timestamp
+const formatTimestamp = (date: Date): string => {
+  return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+};
+
 export function RegradingTab() {
   const [file, setFile] = useState<File | null>(null);
+  const [fileMetadata, setFileMetadata] = useState<{size: number, timestamp: Date} | null>(null);
   const [data, setData] = useState<ExamRow[]>([]);
   const [numQuestions, setNumQuestions] = useState<number>(0);
   const [qCols, setQCols] = useState<string[]>([]);
@@ -73,6 +86,7 @@ export function RegradingTab() {
       const initialMap = buildCorrectAnswersMap(examData, selectedQCols);
 
       setFile(uploadedFile);
+      setFileMetadata({ size: uploadedFile.size, timestamp: new Date() });
       setData(examData);
       setQCols(selectedQCols);
       setNumQuestions(guessedNum);
@@ -80,6 +94,9 @@ export function RegradingTab() {
       setCorrectMap(initialMap);
       setResults([]);
       setRevisedData([]);
+
+      // Clear the input to allow re-selecting the same file
+      e.target.value = '';
     } catch (error: any) {
       logError('Error reading file:', error);
       // Display validation errors or generic error message
@@ -207,7 +224,7 @@ export function RegradingTab() {
           {file && (
             <div className="space-y-4">
               <p className="text-xs text-muted-foreground">
-                ✓ Loaded: {file.name}
+                ✓ Loaded: {file.name} {fileMetadata && `(${formatFileSize(fileMetadata.size)}) at ${formatTimestamp(fileMetadata.timestamp)}`}
               </p>
 
               <div className="flex items-center gap-4">
