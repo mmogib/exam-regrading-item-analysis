@@ -123,12 +123,10 @@ export function UncodingTab() {
 
       // Check for code mismatch if item analysis is already loaded
       if (itemAnalysisData.length > 0) {
-        // Filter out NaN codes before checking mismatch
+        // Convert all codes to strings for comparison
         const itemCodes = Array.from(new Set(
           itemAnalysisData
-            .map(ia => ia.code)
-            .filter(code => !isNaN(code))
-            .map(code => String(code))
+            .map(ia => String(ia.code))
         )).sort();
 
         if (itemCodes.length > 0) {
@@ -186,12 +184,10 @@ export function UncodingTab() {
 
         // Check for code mismatch if answers file is already loaded
         if (usedCodes.length > 0) {
-          // Filter out NaN codes before checking mismatch
+          // Convert all codes to strings for comparison
           const itemCodes = Array.from(new Set(
             parsedData
-              .map(ia => ia.code)
-              .filter(code => !isNaN(code))
-              .map(code => String(code))
+              .map(ia => String(ia.code))
           )).sort();
 
           if (itemCodes.length > 0) {
@@ -236,9 +232,7 @@ export function UncodingTab() {
         // Filter out NaN codes before checking mismatch
         const itemCodes = Array.from(new Set(
           parsedData
-            .map(ia => ia.code)
-            .filter(code => !isNaN(code))
-            .map(code => String(code))
+            .map(ia => String(ia.code))
         )).sort();
 
         if (itemCodes.length > 0) {
@@ -274,7 +268,7 @@ export function UncodingTab() {
         // Map item analysis codes to match answer codes
         mappedItemAnalysis = itemAnalysisData.map(ia => ({
           ...ia,
-          code: reverseMapping[String(ia.code)] ? parseInt(reverseMapping[String(ia.code)]) : ia.code
+          code: reverseMapping[String(ia.code)] || ia.code
         }));
 
         debug('Applied code mapping:', codeMapping);
@@ -296,7 +290,7 @@ export function UncodingTab() {
   const downloadAverageResults = () => {
     if (averageResults.length === 0) return;
 
-    // Flatten codeStats for Excel export
+    // Flatten codeStats for Excel export with grouped code columns
     const flattenedResults = averageResults.map(row => {
       const flattened: any = {
         Master_Question: row.Master_Question,
@@ -306,8 +300,10 @@ export function UncodingTab() {
       // Get all codes sorted numerically
       const codes = Object.keys(row.codeStats).sort((a, b) => parseInt(a) - parseInt(b));
 
-      // Add code stats as separate columns
+      // Add code stats as separate columns grouped together: Position, Count, Avg for each code
       codes.forEach(code => {
+        const position = row.positions[code];
+        flattened[`Code ${code} - Position`] = position || '';
         flattened[`Code ${code} - Count`] = row.codeStats[code].count;
         flattened[`Code ${code} - Avg`] = row.codeStats[code].average;
       });
@@ -736,7 +732,7 @@ export function UncodingTab() {
             <CardHeader className="bg-purple-50 dark:bg-purple-950/30">
               <CardTitle className="text-purple-900 dark:text-purple-100">Master Question Statistics</CardTitle>
               <CardDescription className="text-purple-700 dark:text-purple-300">
-                Performance statistics for each master question across all exam versions
+                Performance statistics for each master question across all exam versions. Note: The same master question may appear at different positions in each exam version (e.g., Master Q1 might be Q7 in Code 1, Q12 in Code 2). Position numbers are shown in parentheses.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 pt-6">
@@ -778,22 +774,31 @@ export function UncodingTab() {
                               {row.Average_score.toFixed(2)}%
                             </span>
                           </TableCell>
-                          {codes.flatMap(code => [
-                            <TableCell key={`${code}-count`} className="text-right">
-                              <span className="text-sm text-slate-600 dark:text-slate-400">
-                                {row.codeStats[code].count}
-                              </span>
-                            </TableCell>,
-                            <TableCell key={`${code}-avg`} className="text-right">
-                              <span className={`font-semibold ${
-                                row.codeStats[code].average >= 70 ? 'text-green-600 dark:text-green-400' :
-                                row.codeStats[code].average >= 50 ? 'text-yellow-600 dark:text-yellow-400' :
-                                'text-red-600 dark:text-red-400'
-                              }`}>
-                                {row.codeStats[code].average.toFixed(2)}%
-                              </span>
-                            </TableCell>
-                          ])}
+                          {codes.flatMap(code => {
+                            const position = row.positions[code];
+                            const positionLabel = position ? ` (Q${position})` : '';
+                            return [
+                              <TableCell key={`${code}-count`} className="text-right">
+                                <span className="text-sm text-slate-600 dark:text-slate-400">
+                                  {row.codeStats[code].count}
+                                </span>
+                                {position && (
+                                  <span className="text-xs text-slate-500 dark:text-slate-500 ml-1">
+                                    (Q{position})
+                                  </span>
+                                )}
+                              </TableCell>,
+                              <TableCell key={`${code}-avg`} className="text-right">
+                                <span className={`font-semibold ${
+                                  row.codeStats[code].average >= 70 ? 'text-green-600 dark:text-green-400' :
+                                  row.codeStats[code].average >= 50 ? 'text-yellow-600 dark:text-yellow-400' :
+                                  'text-red-600 dark:text-red-400'
+                                }`}>
+                                  {row.codeStats[code].average.toFixed(2)}%
+                                </span>
+                              </TableCell>
+                            ];
+                          })}
                         </TableRow>
                       );
                     })}

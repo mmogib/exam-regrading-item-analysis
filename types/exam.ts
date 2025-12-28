@@ -26,7 +26,7 @@ export interface CorrectAnswersMap {
 }
 
 export interface ItemAnalysisRow {
-  code: number;
+  code: string | number;
   order: number;
   order_in_master: number;
 }
@@ -40,10 +40,13 @@ export interface AverageResult {
       average: number;
     };
   };
+  positions: {
+    [code: string]: number; // Maps code to question position (e.g., {"1": 7} means Master Q1 is Q7 in Code 1)
+  };
 }
 
 export interface CodeAverageResult {
-  Code: number;
+  Code: string | number;
   Average_score: number;
 }
 

@@ -352,12 +352,24 @@ export function normalizeItemAnalysis(
     }
     
     // Parse flexibly - handle strings and numbers
-    const code = typeof codeRaw === 'number' ? codeRaw : parseInt(String(codeRaw));
+    // For code: try to parse as number, but keep as string if it's alphanumeric
+    let code: string | number;
+    if (typeof codeRaw === 'number') {
+      code = codeRaw;
+    } else {
+      const parsed = parseInt(String(codeRaw));
+      code = isNaN(parsed) ? String(codeRaw).trim() : parsed;
+    }
+
     const order = typeof orderRaw === 'number' ? orderRaw : parseInt(String(orderRaw));
     const orderInMaster = typeof orderInMasterRaw === 'number' ? orderInMasterRaw : parseInt(String(orderInMasterRaw));
 
     return { code, order, order_in_master: orderInMaster };
-  }).filter(row => !isNaN(row.code) && !isNaN(row.order) && !isNaN(row.order_in_master));
+  }).filter(row => {
+    // Filter out rows with missing/invalid data, but allow alphanumeric codes
+    const hasValidCode = row.code !== '' && row.code !== null && row.code !== undefined;
+    return hasValidCode && !isNaN(row.order) && !isNaN(row.order_in_master);
+  });
 
   debug('Normalized rows:', normalized.length);
   debug('Sample:', normalized.slice(0, 3));
@@ -630,9 +642,9 @@ export function computeAverageResults(
     throw new Error('No student rows found');
   }
 
-  // Get codes used by students
+  // Get codes used by students (keep as strings to support alphanumeric codes)
   const usedCodes = Array.from(new Set(
-    students.map(s => parseInt(s.Code)).filter(c => !isNaN(c))
+    students.map(s => s.Code)
   ));
 
   debug('Used codes from answers:', usedCodes);
@@ -642,16 +654,17 @@ export function computeAverageResults(
   // Build correct answers sets per code
   const correctSets: { [code: string]: AnswerChoice[][] } = {};
   solutions.forEach(sol => {
-    const code = parseInt(sol.Code);
+    const code = sol.Code;
     if (usedCodes.includes(code)) {
-      correctSets[String(code)] = qCols.map(col => parseSolutionCell(sol[col]));
+      correctSets[code] = qCols.map(col => parseSolutionCell(sol[col]));
     }
   });
 
   // Filter item analysis for used codes only
+  // Convert both to strings for comparison to handle mixed types
   const iaUsed = itemAnalysisData.filter(
-    ia => usedCodes.includes(ia.code) &&
-          ia.order >= 1 && 
+    ia => usedCodes.includes(String(ia.code)) &&
+          ia.order >= 1 &&
           ia.order_in_master >= 1
   );
 
@@ -670,13 +683,16 @@ export function computeAverageResults(
 
   // Create mapping: (code, order) -> order_in_master
   const orderMap: { [key: string]: number } = {};
+  // Create reverse mapping: (master_question, code) -> position
+  const positionMap: { [key: string]: number } = {};
   iaUsed.forEach(ia => {
     orderMap[`${ia.code}-${ia.order}`] = ia.order_in_master;
+    positionMap[`${ia.order_in_master}-${ia.code}`] = ia.order;
   });
 
   // Process all student answers
   interface MappedAnswer {
-    code: number;
+    code: string;
     order: number;
     order_in_master: number;
     answer: string;
@@ -686,8 +702,8 @@ export function computeAverageResults(
   const mappedAnswers: MappedAnswer[] = [];
 
   students.forEach(student => {
-    const code = parseInt(student.Code);
-    if (isNaN(code)) return;
+    const code = student.Code;
+    if (!code) return;
 
     qCols.forEach((col, idx) => {
       const order = idx + 1;
@@ -698,7 +714,7 @@ export function computeAverageResults(
       if (!answer) return;
 
       // Check correctness using multi-correct sets
-      const correctSet = correctSets[String(code)]?.[idx] || [];
+      const correctSet = correctSets[code]?.[idx] || [];
       const isCorrect = correctSet.includes(answer as AnswerChoice) ? 1 : 0;
 
       mappedAnswers.push({
@@ -717,7 +733,7 @@ export function computeAverageResults(
   const masterQuestionScores: { [masterQ: number]: number[] } = {};
   const masterQuestionCodeScores: {
     [masterQ: number]: {
-      [code: number]: number[]
+      [code: string]: number[]
     }
   } = {};
 
@@ -751,11 +767,11 @@ export function computeAverageResults(
 
     // Calculate per-code statistics
     const codeStats: { [code: string]: { count: number; average: number } } = {};
+    const positions: { [code: string]: number } = {};
     const codeScores = masterQuestionCodeScores[masterQ] || {};
 
     Object.keys(codeScores).forEach(codeStr => {
-      const code = parseInt(codeStr);
-      const codeAnswers = codeScores[code];
+      const codeAnswers = codeScores[codeStr];
       const codeAvg = codeAnswers.length > 0
         ? (codeAnswers.reduce((a, b) => a + b, 0) / codeAnswers.length) * 100
         : 0;
@@ -764,12 +780,19 @@ export function computeAverageResults(
         count: codeAnswers.length,
         average: Math.round(codeAvg * 100) / 100
       };
+
+      // Get the position of this master question in this code's exam
+      const position = positionMap[`${masterQ}-${codeStr}`];
+      if (position) {
+        positions[codeStr] = position;
+      }
     });
 
     results.push({
       Master_Question: masterQ,
       Average_score: Math.round(avg * 100) / 100,
-      codeStats
+      codeStats,
+      positions
     });
   }
 
@@ -798,35 +821,43 @@ export function computeCodeAverages(
     throw new Error('No student rows found');
   }
 
-  // Get codes used by students
+  // Get codes used by students (keep as strings to support alphanumeric codes)
   const usedCodes = Array.from(new Set(
-    students.map(s => parseInt(s.Code)).filter(c => !isNaN(c))
-  )).sort((a, b) => a - b);
+    students.map(s => s.Code)
+  )).sort((a, b) => {
+    // Sort codes: numeric first (by value), then alphabetic
+    const numA = parseInt(a);
+    const numB = parseInt(b);
+    if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+    if (!isNaN(numA)) return -1;
+    if (!isNaN(numB)) return 1;
+    return a.localeCompare(b);
+  });
 
   // Build correct answers sets per code
   const correctSets: { [code: string]: AnswerChoice[][] } = {};
   solutions.forEach(sol => {
-    const code = parseInt(sol.Code);
+    const code = sol.Code;
     if (usedCodes.includes(code)) {
-      correctSets[String(code)] = qCols.map(col => parseSolutionCell(sol[col]));
+      correctSets[code] = qCols.map(col => parseSolutionCell(sol[col]));
     }
   });
 
   // Group scores by code
-  const codeScores: { [code: number]: number[] } = {};
+  const codeScores: { [code: string]: number[] } = {};
   usedCodes.forEach(code => {
     codeScores[code] = [];
   });
 
   students.forEach(student => {
-    const code = parseInt(student.Code);
-    if (isNaN(code) || !usedCodes.includes(code)) return;
+    const code = student.Code;
+    if (!code || !usedCodes.includes(code)) return;
 
     qCols.forEach((col, idx) => {
       const answer = student[col];
       if (!answer) return;
 
-      const correctSet = correctSets[String(code)]?.[idx] || [];
+      const correctSet = correctSets[code]?.[idx] || [];
       const isCorrect = correctSet.includes(answer as AnswerChoice) ? 1 : 0;
       codeScores[code].push(isCorrect);
     });
