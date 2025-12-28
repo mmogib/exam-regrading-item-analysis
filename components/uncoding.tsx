@@ -386,9 +386,9 @@ export function UncodingTab() {
                 />
                 <Upload className="h-5 w-5 text-muted-foreground shrink-0" />
               </div>
-              {answersFile && (
+              {answersFile && answersFileMetadata && (
                 <p className="text-xs text-muted-foreground">
-                  ✓ Loaded: {answersFile.name}
+                  ✓ Loaded: {answersFile.name} ({formatFileSize(answersFileMetadata.size)}) at {formatTimestamp(answersFileMetadata.timestamp)}
                 </p>
               )}
             </div>
@@ -408,7 +408,7 @@ export function UncodingTab() {
               {itemAnalysisFile && csvDetection && (
                 <div className="space-y-1">
                   <p className="text-xs text-muted-foreground">
-                    ✓ Loaded: {itemAnalysisFile.name}
+                    ✓ Loaded: {itemAnalysisFile.name} {itemAnalysisFileMetadata && `(${formatFileSize(itemAnalysisFileMetadata.size)}) at ${formatTimestamp(itemAnalysisFileMetadata.timestamp)}`}
                   </p>
                   <div className="flex items-center gap-2 text-xs">
                     {csvDetection.format === 'UNKNOWN' ? (
