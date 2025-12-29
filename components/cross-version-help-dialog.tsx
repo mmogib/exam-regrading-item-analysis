@@ -33,14 +33,18 @@ export function CrossVersionHelpDialog() {
         </DialogHeader>
 
         <Tabs defaultValue="answers" className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="answers" className="gap-2">
               <FileSpreadsheet className="h-4 w-4" />
               Answers File
             </TabsTrigger>
             <TabsTrigger value="analysis" className="gap-2">
               <FileText className="h-4 w-4" />
-              Item Analysis File
+              Item Analysis
+            </TabsTrigger>
+            <TabsTrigger value="distractor" className="gap-2">
+              <Calculator className="h-4 w-4" />
+              Distractor Analysis
             </TabsTrigger>
           </TabsList>
 
@@ -297,6 +301,197 @@ export function CrossVersionHelpDialog() {
                     of your columns represent the version code, version question number, and master question number.
                   </p>
                 </div>
+              </div>
+            </div>
+          </TabsContent>
+
+          {/* Distractor Analysis Tab */}
+          <TabsContent value="distractor" className="space-y-4 mt-4">
+            <div className="space-y-4">
+              <div>
+                <h3 className="font-semibold text-lg mb-2">What is Distractor Analysis?</h3>
+                <p className="text-sm text-muted-foreground">
+                  Distractor analysis shows which answer choices students select, broken down by performance level.
+                  It helps identify if weak students are attracted to specific wrong answers (distractors),
+                  which can reveal confusing questions or misleading answer choices.
+                </p>
+              </div>
+
+              <div className="bg-orange-50 dark:bg-orange-950/20 border-2 border-orange-200 dark:border-orange-800 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="h-6 w-6 text-orange-600 dark:text-orange-400 mt-0.5 shrink-0" />
+                  <div className="space-y-2 flex-1">
+                    <h3 className="font-semibold text-lg text-orange-900 dark:text-orange-100">
+                      Requirements for Distractor Analysis
+                    </h3>
+                    <p className="text-sm text-orange-800 dark:text-orange-200">
+                      Distractor analysis requires the <strong>QUESTIONS_MAP format</strong> with a <strong>Permutation</strong> column.
+                      This extended format includes how answer choices are scrambled across exam versions.
+                    </p>
+                    <p className="text-sm text-orange-800 dark:text-orange-200">
+                      If you upload the basic ItemAnalysis format (without Permutation), you'll see a warning
+                      and distractor analysis will be skipped. All other features will still work normally.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <h3 className="font-semibold text-lg mb-2">QUESTIONS_MAP Format (Extended)</h3>
+                <p className="text-sm text-muted-foreground mb-3">
+                  The QUESTIONS_MAP format extends the basic ItemAnalysis format with additional columns:
+                </p>
+
+                <div className="bg-muted p-3 rounded-md font-mono text-xs overflow-x-auto mb-3">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-slate-300 dark:border-slate-700">
+                        <th className="text-left pr-4 pb-2">Group</th>
+                        <th className="text-left pr-4 pb-2">Master Q#</th>
+                        <th className="text-left pr-4 pb-2">Version</th>
+                        <th className="text-left pr-4 pb-2">Version Q#</th>
+                        <th className="text-left pr-4 pb-2">Permutation</th>
+                        <th className="text-left pr-4 pb-2">Correct</th>
+                        <th className="text-left pr-4 pb-2">Points</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr><td className="pr-4 py-1">1</td><td className="pr-4">11</td><td className="pr-4">1</td><td className="pr-4">1</td><td className="pr-4 text-blue-600 dark:text-blue-400 font-bold">CADEB</td><td className="pr-4">B</td><td className="pr-4">1</td></tr>
+                      <tr><td className="pr-4 py-1">1</td><td className="pr-4">5</td><td className="pr-4">1</td><td className="pr-4">2</td><td className="pr-4 text-blue-600 dark:text-blue-400 font-bold">ABEDC</td><td className="pr-4">A</td><td className="pr-4">1</td></tr>
+                      <tr><td className="pr-4 py-1">1</td><td className="pr-4">17</td><td className="pr-4">1</td><td className="pr-4">3</td><td className="pr-4 text-blue-600 dark:text-blue-400 font-bold">ACEBD</td><td className="pr-4">A</td><td className="pr-4">1</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="space-y-2 text-sm text-muted-foreground">
+                  <p><strong>New columns explained:</strong></p>
+                  <ul className="list-disc list-inside space-y-1 ml-2">
+                    <li><strong>Permutation:</strong> Shows how answer choices A-E are scrambled in this version</li>
+                    <li><strong>Correct:</strong> The correct answer for this question in this version</li>
+                    <li><strong>Points:</strong> Points awarded for this question (usually 1)</li>
+                    <li><strong>Group:</strong> Optional grouping identifier (can be same for all)</li>
+                  </ul>
+                </div>
+              </div>
+
+              <div>
+                <h3 className="font-semibold text-lg mb-2">Understanding Permutations</h3>
+                <p className="text-sm text-muted-foreground mb-3">
+                  The <strong>Permutation</strong> column shows how answer choices in the exam version map to the master exam.
+                  Each position in the permutation string represents a choice in the version's exam.
+                </p>
+
+                <div className="bg-blue-50 dark:bg-blue-950/20 border-2 border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                  <h4 className="font-semibold text-sm mb-3 text-blue-900 dark:text-blue-100">
+                    Example: Permutation "CADEB"
+                  </h4>
+
+                  <div className="space-y-2 text-sm">
+                    <p className="text-blue-800 dark:text-blue-200 mb-2">
+                      This permutation means the answer choices in Version 1 map to the master as follows:
+                    </p>
+
+                    <div className="bg-white dark:bg-slate-900 rounded p-3 border border-blue-200 dark:border-blue-800 font-mono text-xs space-y-1">
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="font-bold text-blue-700 dark:text-blue-300">Version Choice</div>
+                        <div className="font-bold text-blue-700 dark:text-blue-300">→</div>
+                        <div className="font-bold text-blue-700 dark:text-blue-300">Master Choice</div>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>A (position 0)</div>
+                        <div>→</div>
+                        <div>C (permutation[0])</div>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>B (position 1)</div>
+                        <div>→</div>
+                        <div>A (permutation[1])</div>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>C (position 2)</div>
+                        <div>→</div>
+                        <div>D (permutation[2])</div>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>D (position 3)</div>
+                        <div>→</div>
+                        <div>E (permutation[3])</div>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>E (position 4)</div>
+                        <div>→</div>
+                        <div>B (permutation[4])</div>
+                      </div>
+                    </div>
+
+                    <div className="bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded p-3 mt-3">
+                      <p className="text-sm text-green-800 dark:text-green-200">
+                        <strong>Real Example:</strong> If a student in Version 1 selected answer <strong>C</strong>,
+                        they actually chose what corresponds to master option <strong>D</strong> (because C is at position 2, and permutation[2] = 'D').
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <h3 className="font-semibold text-lg mb-2">Interpreting Distractor Analysis Results</h3>
+                <p className="text-sm text-muted-foreground mb-3">
+                  The results show how students at different performance levels answered each question:
+                </p>
+
+                <div className="space-y-3">
+                  <div className="bg-muted p-3 rounded-md border-l-4 border-green-500">
+                    <p className="font-semibold text-sm mb-1">Top 25% (T1)</p>
+                    <p className="text-xs text-muted-foreground">
+                      Highest-scoring students. Should mostly select correct answers.
+                    </p>
+                  </div>
+
+                  <div className="bg-muted p-3 rounded-md border-l-4 border-blue-500">
+                    <p className="font-semibold text-sm mb-1">Second 25% (T2)</p>
+                    <p className="text-xs text-muted-foreground">
+                      Above-average students.
+                    </p>
+                  </div>
+
+                  <div className="bg-muted p-3 rounded-md border-l-4 border-yellow-500">
+                    <p className="font-semibold text-sm mb-1">Third 25% (T3)</p>
+                    <p className="text-xs text-muted-foreground">
+                      Below-average students.
+                    </p>
+                  </div>
+
+                  <div className="bg-muted p-3 rounded-md border-l-4 border-red-500">
+                    <p className="font-semibold text-sm mb-1">Bottom 25% (T4)</p>
+                    <p className="text-xs text-muted-foreground">
+                      Lowest-scoring students. Often attracted to confusing distractors.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-800 rounded p-3 mt-3">
+                  <p className="text-sm text-yellow-900 dark:text-yellow-200">
+                    <strong>💡 Educational Insight:</strong> If a wrong answer attracts many TOP 25% students,
+                    it might be a legitimate alternative answer or the question may be ambiguous.
+                    If a wrong answer attracts many BOTTOM 25% students but few top students,
+                    it's working as an effective distractor.
+                  </p>
+                </div>
+              </div>
+
+              <div>
+                <h3 className="font-semibold text-lg mb-2">Output Format</h3>
+                <p className="text-sm text-muted-foreground mb-2">
+                  The distractor analysis displays results with:
+                </p>
+                <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1 ml-2">
+                  <li>Collapsible accordion showing one master question at a time</li>
+                  <li>Correct answer marked with an asterisk (*)</li>
+                  <li>Count and percentage for each choice</li>
+                  <li>Breakdown by performance quartile</li>
+                  <li>"Blank/Other" row for students who didn't answer or gave invalid responses</li>
+                </ul>
               </div>
             </div>
           </TabsContent>

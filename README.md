@@ -18,6 +18,7 @@ A modern, client-side web application for re-grading MCQ-based exams and perform
 - Support for multi-correct answers from solution rows
 - Support for alphanumeric exam codes (V1, A, 002, etc.)
 - Generate comprehensive item analysis reports
+- **Distractor analysis** showing answer choice distribution by student performance quartiles
 
 ## Tech Stack
 
@@ -92,10 +93,12 @@ netlify deploy --prod --dir=out
 - **Input**:
   - Answers file (.xls/.xlsx): Same format as re-grading
   - `item_analysis.csv`: Maps question positions across versions (supports multiple CSV formats)
+  - `QUESTIONS_MAP.csv` (optional): Extended format with Permutation column for distractor analysis
 
 - **Output**:
   - `master-question-statistics.xlsx`: Average % correct per master question with position mapping
   - `exam-version-statistics.xlsx`: Performance statistics per exam version
+  - `distractor-analysis.xlsx`: Answer choice distribution by performance quartiles (requires QUESTIONS_MAP format)
 
 ## Usage
 
@@ -107,12 +110,13 @@ netlify deploy --prod --dir=out
 5. Download the revised files
 
 ### Cross-Version Analysis Workflow
-1. Upload both the answers file and `item_analysis.csv`
+1. Upload both the answers file and `item_analysis.csv` (or `QUESTIONS_MAP.csv` for distractor analysis)
 2. Set the number of questions (master order)
-3. Click "Compute Averages"
-4. Download the statistics files:
+3. Click "Compute"
+4. View results and download statistics files:
    - `master-question-statistics.xlsx`: Per master question stats with position mapping
    - `exam-version-statistics.xlsx`: Per exam version stats
+   - `distractor-analysis.xlsx`: Answer choice distribution (if QUESTIONS_MAP format uploaded)
 
 ## Key Features
 
@@ -146,7 +150,8 @@ Download filenames are configurable via `config/downloads.json`:
 {
   "crossVersionAnalysis": {
     "masterQuestionStats": "master-question-statistics.xlsx",
-    "examVersionStats": "exam-version-statistics.xlsx"
+    "examVersionStats": "exam-version-statistics.xlsx",
+    "distractorAnalysis": "distractor-analysis.xlsx"
   },
   "reGrading": {
     "examDataRevised": "exam-data-regraded.xlsx",
@@ -158,6 +163,14 @@ Download filenames are configurable via `config/downloads.json`:
 }
 ```
 Simply edit and rebuild - no code changes needed!
+
+### Distractor Analysis
+- Identifies which answer choices students select based on their performance level
+- Helps pinpoint confusing distractors that attract weak students
+- Requires QUESTIONS_MAP format with Permutation column
+- Displays results by performance quartiles (TOP 25%, SECOND 25%, THIRD 25%, BOTTOM 25%)
+- Collapsible accordion UI for easy navigation
+- Automatic validation of correct answers against solution rows
 
 ## Development
 

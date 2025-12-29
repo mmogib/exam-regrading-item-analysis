@@ -43,6 +43,26 @@ See `README.md` for full development guidelines.
 - Zero runtime overhead (bundled at build time)
 - Used across: `components/uncoding.tsx`, `components/re-grading.tsx`, `lib/template-generator.ts`
 
+### Distractor Analysis (2025)
+- Analyzes which answer choices students select across performance quartiles
+- Shows if weak students are attracted to specific wrong answers (distractors)
+- Helps identify confusing questions and misleading answer choices
+- **Requirements**: QUESTIONS_MAP format with Permutation column
+- **Implementation**:
+  - Functions: `classifyStudentsByQuartile()`, `validateCorrectAnswers()`, `computeDistractorAnalysis()` in `lib/excel-utils.ts`
+  - Types: `StudentResultWithRank`, `DistractorAnalysisResult`, `DistractorChoiceResult` in `types/exam.ts`
+  - UI: Accordion component in `components/uncoding.tsx` (orange-themed card)
+  - Download: `distractor-analysis.xlsx`
+- **Features**:
+  - Global quartile ranking (T1=Top 25%, T2=Second 25%, T3=Third 25%, T4=Bottom 25%)
+  - Tie handling at quartile boundaries (assigns to higher quartile)
+  - Permutation decoding (maps version-specific answers to master question options)
+  - Correct answer validation (QUESTIONS_MAP vs solution rows)
+  - Blank/Other tracking for invalid/missing responses
+  - Collapsible per-question view with accordion UI
+- **Data Format**: Extends `ItemAnalysisRow` with optional fields: `permutation`, `correct`, `points`, `group`
+- **Backward Compatible**: Works with old ItemAnalysis format (shows warning, skips distractor analysis)
+
 ## Configuration
 
 ### Download Filenames
