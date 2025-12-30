@@ -26,6 +26,8 @@ The application is a client-side only Next.js app with static export capability.
   - Handles exam answers (.xls/.xlsx/.csv/.txt) and item analysis (.csv) uploads
   - CSV format auto-detection (OLD/NEW/UNKNOWN) with manual column mapping
   - Code mismatch detection and mapping UI
+    - Normalizes codes (trim whitespace) for reliable comparison
+    - Supports partial code mapping (e.g., answer file codes 005-008 mapped to item CSV codes 5-8, while codes 1-4 remain unmapped)
   - Student statistics display
   - Used by both Cross-Version Analysis and Item Analysis tabs
 
@@ -77,6 +79,8 @@ See `README.md` for full development guidelines.
   - Tie handling at quartile boundaries (assigns to higher quartile)
   - Permutation decoding (maps version-specific answers to master question options)
   - Correct answer validation (QUESTIONS_MAP vs solution rows)
+    - **Code mapping support**: Validation automatically skips unmapped codes (e.g., if answer file has codes 005-008 but item CSV has 1-8, only mapped codes are validated)
+    - Implementation: `validateCorrectAnswers()` in `lib/excel-utils.ts` normalizes and skips codes without solution rows
   - Blank/Other tracking for invalid/missing responses
   - Collapsible per-question view with accordion UI
 - **Data Format**: Extends `ItemAnalysisRow` with optional fields: `permutation`, `correct`, `points`, `group`

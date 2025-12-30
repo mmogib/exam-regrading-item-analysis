@@ -1066,23 +1066,41 @@ export function validateCorrectAnswers(
   const solutionRows: { [code: string]: ExamRow } = {};
   examData.forEach(row => {
     if (isSolutionRow(row)) {
-      solutionRows[String(row.Code)] = row;
+      // Normalize code: trim and convert to string
+      const normalizedCode = String(row.Code).trim();
+      solutionRows[normalizedCode] = row;
     }
   });
 
   const errors: string[] = [];
+  const skippedCodes = new Set<string>();
+
+  // Debug: log available solution codes
+  const availableCodes = Object.keys(solutionRows);
+  debug('Available solution codes:', availableCodes);
+
+  // Get unique codes from item analysis
+  const itemAnalysisCodes = Array.from(new Set(itemAnalysis.map(ia => String(ia.code).trim())));
+  debug('Item analysis codes:', itemAnalysisCodes);
 
   // For each mapping entry with correct answer
   itemAnalysis.forEach(ia => {
     if (!ia.correct) return;
 
-    const code = String(ia.code);
+    // Normalize code: trim and convert to string
+    const code = String(ia.code).trim();
     const solutionRow = solutionRows[code];
 
     if (!solutionRow) {
-      errors.push(`Version ${code}: No solution row found`);
+      // Skip validation for codes without solution rows (they may be from other exams or unmapped)
+      if (!skippedCodes.has(code)) {
+        skippedCodes.add(code);
+        debug(`Skipping validation for code "${code}" - no solution row found. Available codes: ${availableCodes.join(', ')}`);
+      }
       return;
     }
+
+    debug(`Validating code: "${code}"`);
 
     // Get the answer from solution row at the version question position
     const versionQuestionCol = String(ia.order);
@@ -1094,6 +1112,12 @@ export function validateCorrectAnswers(
       );
     }
   });
+
+  // Log summary of validation
+  if (skippedCodes.size > 0) {
+    debug(`Validation summary: ${skippedCodes.size} code(s) skipped (no solution rows): ${Array.from(skippedCodes).join(', ')}`);
+  }
+  debug(`Validation summary: ${errors.length} error(s) found`);
 
   if (errors.length > 0) {
     return `Correct answer mismatch detected:\n${errors.join('\n')}`;

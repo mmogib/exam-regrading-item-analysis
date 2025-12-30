@@ -82,6 +82,11 @@ export function AnalysisDataUploader({ onDataReady, onDataChange, helpDialog }: 
 
   // Helper function to detect code mismatch and suggest mapping
   const checkCodeMismatch = (answerCodes: string[], itemCodes: string[]) => {
+    // Normalize codes: trim whitespace
+    const normalizeCode = (code: string) => String(code).trim();
+    const normalizedAnswerCodes = answerCodes.map(normalizeCode);
+    const normalizedItemCodes = itemCodes.map(normalizeCode);
+
     // Sort codes: numeric first (by value), then alphabetic
     const sortCodes = (codes: string[]) => {
       return [...codes].sort((a, b) => {
@@ -94,8 +99,8 @@ export function AnalysisDataUploader({ onDataReady, onDataChange, helpDialog }: 
       });
     };
 
-    const sortedAnswerCodes = sortCodes(answerCodes);
-    const sortedItemCodes = sortCodes(itemCodes);
+    const sortedAnswerCodes = sortCodes(normalizedAnswerCodes);
+    const sortedItemCodes = sortCodes(normalizedItemCodes);
 
     // Check if codes match exactly
     const codesMatch = sortedAnswerCodes.length === sortedItemCodes.length &&
@@ -291,19 +296,28 @@ export function AnalysisDataUploader({ onDataReady, onDataChange, helpDialog }: 
       let mappedItemAnalysis = itemAnalysisData;
       if (Object.keys(codeMapping).length > 0) {
         // Create reverse mapping: itemCode -> answerCode
+        // Normalize all codes (trim and convert to string)
         const reverseMapping: {[itemCode: string]: string} = {};
         Object.entries(codeMapping).forEach(([answerCode, itemCode]) => {
-          reverseMapping[itemCode] = answerCode;
+          const normalizedItemCode = String(itemCode).trim();
+          const normalizedAnswerCode = String(answerCode).trim();
+          reverseMapping[normalizedItemCode] = normalizedAnswerCode;
         });
 
         // Map item analysis codes to match answer codes
-        mappedItemAnalysis = itemAnalysisData.map(ia => ({
-          ...ia,
-          code: reverseMapping[String(ia.code)] || ia.code
-        }));
+        mappedItemAnalysis = itemAnalysisData.map(ia => {
+          const normalizedIaCode = String(ia.code).trim();
+          const mappedCode = reverseMapping[normalizedIaCode];
+          return {
+            ...ia,
+            code: mappedCode || ia.code
+          };
+        });
 
-        debug('Applied code mapping:', codeMapping);
-        debug('Mapped item analysis sample:', mappedItemAnalysis.slice(0, 5));
+        debug('Code mapping (answer -> item):', codeMapping);
+        debug('Reverse mapping (item -> answer):', reverseMapping);
+        debug('Original item analysis codes:', itemAnalysisData.slice(0, 5).map(ia => ia.code));
+        debug('Mapped item analysis codes:', mappedItemAnalysis.slice(0, 5).map(ia => ia.code));
       }
 
       onDataReady({
