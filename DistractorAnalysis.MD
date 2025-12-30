@@ -1,14 +1,14 @@
 ## Notation (used throughout)
 
-- (k = 20): number of items.
-- (N): number of students.
-- Item index (i = 1,\dots,k).
-- Option index (j = 1,\dots,5).
-- (n\_{ij}): number of students selecting option (j) for item (i).
-- Correct option for item (i) is (j^\*(i)).
-- (n*{i,c}=n*{i,j^\*(i)}): # correct for item (i).
-- Total score for student (s): (T*s = \sum*{i=1}^k X*{is}), where (X*{is}=1) if correct, else 0.
-- Use **rest score** for item (i): (T^{(-i)}_s = T_s - X_{is}) (recommended for correlations).
+- $(k = 20)$: number of items.
+- $(N)$: number of students.
+- Item index $(i = 1,\dots,k)$.
+- Option index $(j = 1,\dots,5)$.
+- $(n\_{ij})$: number of students selecting option $(j)$ for item $(i)$.
+- Correct option for item $(i)$ is $(j^*(i))$.
+- $(n*{i,c}=n*{i,j^*(i)})$: # correct for item $(i)$.
+- Total score for student $(s)$: $(T*s = \sum*{i=1}^k X*{is})$, where $(X*{is}=1)$ if correct, else 0.
+- Use **rest score** for item $(i)$: $(T^{(-i)}_s = T_s - X_{is})$ (recommended for correlations).
 
 ---
 
@@ -20,18 +20,18 @@ Compute the proportion of students answering the item correctly.
 
 ### Formula
 
-[
+$$
 p_i = \frac{n_{i,c}}{N}
-]
+$$
 
 ### Interpretation
 
 - (p_i) near **1**: easy; near **0**: hard.
 - Common operational targets:
 
-  - **Good working range**: (0.30 \le p_i \le 0.80)
-  - **Too difficult**: (p_i < 0.30)
-  - **Too easy**: (p_i > 0.80)
+  - **Good working range**: $(0.30 \le p_i \le 0.80)$
+  - **Too difficult**: $(p_i < 0.30)$
+  - **Too easy**: $(p_i > 0.80)$
 
 For **5 options**, random-guess baseline is (1/5=0.20). If (p_i) is close to 0.20, the item may be near “guess-level” (or the content was not learned).
 
@@ -45,18 +45,18 @@ For each option, compute how many students chose it.
 
 ### Formula
 
-[
+$$
 p_{ij} = \frac{n_{ij}}{N}, \quad j=1,\dots,5
-]
+$$
 
 ### Interpretation
 
-- The **correct option** should typically be the modal choice (largest (p\_{ij})).
+- The **correct option** should typically be the modal choice (largest $(p_{ij})$).
 - Each distractor should be “plausible” and attract some students.
 - Rule-of-thumb for distractor functioning:
 
-  - **Functional distractor**: (p\_{ij} \ge 0.05) (≥ 5% choose it)
-  - **Non-functional distractor (NFD)**: (p\_{ij} < 0.05)
+  - **Functional distractor**: ($p_{ij} \ge 0.05$) (≥ $5%$ choose it)
+  - **Non-functional distractor (NFD)**: $(p\_{ij} < 0.05)$
 
 - If two or more distractors are NFDs, the item often becomes too easy or poorly constructed.
 
@@ -72,9 +72,9 @@ With 5 options, there are **4 distractors**.
 
 ### Formula
 
-[
-\text{DE}*i = \frac{#{j \neq j^*(i):; p*{ij} \ge 0.05}}{4}\times 100%
-]
+$$
+\text{DE} = \frac{\{j \neq j^*(i): p_{ij} \ge 0.05\}}{4}\times 100%
+$$
 
 ### Interpretation
 

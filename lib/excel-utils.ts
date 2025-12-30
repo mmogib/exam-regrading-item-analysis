@@ -650,6 +650,84 @@ export function exportToExcel(data: any[], filename: string, sheetName: string, 
 }
 
 /**
+ * Export comprehensive item analysis to multi-sheet Excel file
+ */
+export function exportComprehensiveAnalysisToExcel(
+  results: import('@/types/exam').ComprehensiveItemAnalysisResult,
+  filename: string
+) {
+  const workbook = XLSX.utils.book_new();
+
+  // Sheet 1: Test Summary
+  const summaryData = [
+    { Metric: 'Total Items', Value: results.testSummary.totalItems },
+    { Metric: 'Total Students', Value: results.testSummary.totalStudents },
+    { Metric: 'Mean Score', Value: results.testSummary.meanScore.toFixed(2) },
+    { Metric: 'Std Dev Score', Value: results.testSummary.stdDevScore.toFixed(2) },
+    { Metric: 'Mean Difficulty (p)', Value: results.testSummary.meanDifficulty.toFixed(3) },
+    { Metric: 'Mean Discrimination (D)', Value: results.testSummary.meanDiscrimination.toFixed(3) },
+    { Metric: 'KR-20 Reliability', Value: results.testSummary.KR20.toFixed(3) },
+    { Metric: '', Value: '' },
+    { Metric: 'Items to Keep', Value: results.testSummary.itemsToKeep },
+    { Metric: 'Items to Revise', Value: results.testSummary.itemsToRevise },
+    { Metric: 'Items to Investigate', Value: results.testSummary.itemsToInvestigate }
+  ];
+  const summarySheet = XLSX.utils.json_to_sheet(summaryData);
+  XLSX.utils.book_append_sheet(workbook, summarySheet, 'Summary');
+
+  // Sheet 2: Item Statistics
+  const itemData = results.itemStatistics.map(item => ({
+    'Question': item.questionNumber,
+    'Difficulty (p)': item.p_i.toFixed(3),
+    'Discrimination (D)': item.D_i.toFixed(3),
+    'Point-Biserial (r_pb)': item.r_pb.toFixed(3),
+    'Distractor Efficiency (%)': item.DE.toFixed(1),
+    'Decision': item.decision,
+    'Reason': item.decisionReason || ''
+  }));
+  const itemSheet = XLSX.utils.json_to_sheet(itemData);
+  XLSX.utils.book_append_sheet(workbook, itemSheet, 'Item Statistics');
+
+  // Sheet 3: Option Statistics
+  const optionData = results.optionStatistics.map(opt => ({
+    'Question': opt.questionNumber,
+    'Option': opt.isCorrect ? `${opt.option}*` : opt.option,
+    'Count': opt.count,
+    'Proportion (p_ij)': opt.p_ij.toFixed(3),
+    'Percentage': `${opt.percentage.toFixed(1)}%`,
+    'Discrimination (D_ij)': opt.D_ij.toFixed(3),
+    'Point-Biserial (r_pb)': opt.r_pb.toFixed(3),
+    'Top 25% (T1)': opt.T1,
+    'Second 25% (T2)': opt.T2,
+    'Third 25% (T3)': opt.T3,
+    'Bottom 25% (T4)': opt.T4,
+    'Functional': opt.isFunctional ? 'Yes' : (opt.option === 'Blank/Other' ? 'N/A' : 'No')
+  }));
+  const optionSheet = XLSX.utils.json_to_sheet(optionData);
+  XLSX.utils.book_append_sheet(workbook, optionSheet, 'Option Analysis');
+
+  // Sheet 4: Decision Guide
+  const guideData = [
+    { Metric: 'Difficulty (p)', 'Ideal Range': '0.30 - 0.80', Interpretation: 'Proportion of students answering correctly' },
+    { Metric: 'Discrimination (D)', 'Ideal Range': '≥ 0.20', Interpretation: 'Difference between top 27% and bottom 27%' },
+    { Metric: 'Point-Biserial (r_pb)', 'Ideal Range': '≥ 0.20', Interpretation: 'Correlation with rest score (corrected for item)' },
+    { Metric: 'Distractor Efficiency', 'Ideal Range': '≥ 75%', Interpretation: 'Percentage of distractors selected by ≥5% of students' },
+    { Metric: 'KR-20 Reliability', 'Ideal Range': '≥ 0.70', Interpretation: 'Internal consistency of test (0.80+ is good)' },
+    { Metric: '', 'Ideal Range': '', Interpretation: '' },
+    { Metric: 'KEEP Decision', 'Ideal Range': '', Interpretation: 'Good difficulty, discrimination, and distractor efficiency' },
+    { Metric: 'REVISE Decision', 'Ideal Range': '', Interpretation: 'Too easy/hard, weak discrimination, or poor distractors' },
+    { Metric: 'INVESTIGATE Decision', 'Ideal Range': '', Interpretation: 'Negative discrimination or correlation (possible wrong key)' }
+  ];
+  const guideSheet = XLSX.utils.json_to_sheet(guideData);
+  XLSX.utils.book_append_sheet(workbook, guideSheet, 'Interpretation Guide');
+
+  // Export workbook
+  const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+  const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  saveAs(blob, filename);
+}
+
+/**
  * Compute average scores per master question (for uncoding)
  */
 export function computeAverageResults(
@@ -1137,4 +1215,594 @@ export function computeDistractorAnalysis(
   });
 
   return results;
+}
+
+/**
+ * ==========================================================================
+ * COMPREHENSIVE ITEM ANALYSIS - Psychometric Calculations
+ * ==========================================================================
+ */
+
+/**
+ * Helper: Decode permutation to get master option from student's answer
+ */
+function decodePermutation(studentChoice: string, permutation: string): string {
+  if (!studentChoice || !permutation) return 'Blank/Other';
+
+  const choices = ['A', 'B', 'C', 'D', 'E'];
+  const choiceIndex = choices.indexOf(studentChoice.toUpperCase());
+
+  if (choiceIndex === -1) return 'Blank/Other';
+
+  const permArray = permutation.toUpperCase().split('');
+  if (choiceIndex >= permArray.length) return 'Blank/Other';
+
+  return permArray[choiceIndex];
+}
+
+/**
+ * Helper: Calculate mean of array
+ */
+function mean(values: number[]): number {
+  if (values.length === 0) return 0;
+  return values.reduce((sum, v) => sum + v, 0) / values.length;
+}
+
+/**
+ * Helper: Calculate standard deviation
+ */
+function stdDev(values: number[]): number {
+  if (values.length === 0) return 0;
+  const avg = mean(values);
+  const squareDiffs = values.map(v => Math.pow(v - avg, 2));
+  const variance = mean(squareDiffs);
+  return Math.sqrt(variance);
+}
+
+/**
+ * Helper: Calculate proportion correct for each item
+ * Returns array where index i corresponds to question i (0-indexed)
+ */
+function calculateItemProportions(
+  students: StudentResultWithRank[],
+  answersData: ExamRow[],
+  qCols: string[],
+  correctMap: CorrectAnswersMap
+): number[] {
+  return qCols.map((qCol, idx) => {
+    let correct = 0;
+    let total = 0;
+
+    students.forEach(student => {
+      const examRow = answersData.find(
+        row => row.ID === student.ID && row.Code === student.Code && !isSolutionRow(row)
+      );
+      if (!examRow) return;
+
+      total++;
+      const answer = examRow[qCol];
+      const code = String(student.Code);
+      const correctAnswers = correctMap[code]?.[idx] || [];
+
+      if (correctAnswers.some(ca => ca === answer)) {
+        correct++;
+      }
+    });
+
+    return total > 0 ? correct / total : 0;
+  });
+}
+
+/**
+ * Method A: Calculate item difficulty (p-value) for each question
+ * p_i = proportion of students answering item i correctly
+ */
+function computeItemDifficulty(
+  students: StudentResultWithRank[],
+  answersData: ExamRow[],
+  qCols: string[],
+  correctMap: CorrectAnswersMap
+): number[] {
+  return calculateItemProportions(students, answersData, qCols, correctMap);
+}
+
+/**
+ * Method D: Calculate upper-lower discrimination index (D_i) for each item
+ * Uses top 27% and bottom 27% of students
+ */
+function computeUpperLowerDiscrimination(
+  students: StudentResultWithRank[],
+  answersData: ExamRow[],
+  qCols: string[],
+  correctMap: CorrectAnswersMap
+): number[] {
+  // Sort students by total score
+  const sorted = [...students].sort((a, b) => b.Tot - a.Tot);
+  const n = sorted.length;
+  const cutoff = Math.ceil(n * 0.27);
+
+  const upperGroup = sorted.slice(0, cutoff);
+  const lowerGroup = sorted.slice(-cutoff);
+
+  return qCols.map((qCol, idx) => {
+    // Count correct in upper group
+    let upperCorrect = 0;
+    upperGroup.forEach(student => {
+      const examRow = answersData.find(
+        row => row.ID === student.ID && row.Code === student.Code && !isSolutionRow(row)
+      );
+      if (!examRow) return;
+
+      const answer = examRow[qCol];
+      const code = String(student.Code);
+      const correctAnswers = correctMap[code]?.[idx] || [];
+
+      if (correctAnswers.some(ca => ca === answer)) {
+        upperCorrect++;
+      }
+    });
+
+    // Count correct in lower group
+    let lowerCorrect = 0;
+    lowerGroup.forEach(student => {
+      const examRow = answersData.find(
+        row => row.ID === student.ID && row.Code === student.Code && !isSolutionRow(row)
+      );
+      if (!examRow) return;
+
+      const answer = examRow[qCol];
+      const code = String(student.Code);
+      const correctAnswers = correctMap[code]?.[idx] || [];
+
+      if (correctAnswers.some(ca => ca === answer)) {
+        lowerCorrect++;
+      }
+    });
+
+    const pUpper = upperGroup.length > 0 ? upperCorrect / upperGroup.length : 0;
+    const pLower = lowerGroup.length > 0 ? lowerCorrect / lowerGroup.length : 0;
+
+    return pUpper - pLower;
+  });
+}
+
+/**
+ * Method F: Calculate point-biserial correlation for each item
+ * Uses rest score (total score minus item score) to avoid part-whole inflation
+ */
+function computeItemPointBiserial(
+  students: StudentResultWithRank[],
+  answersData: ExamRow[],
+  qCols: string[],
+  correctMap: CorrectAnswersMap
+): number[] {
+  return qCols.map((qCol, idx) => {
+    // Calculate rest scores for all students
+    const dataPoints: { correct: boolean; restScore: number }[] = [];
+
+    students.forEach(student => {
+      const examRow = answersData.find(
+        row => row.ID === student.ID && row.Code === student.Code && !isSolutionRow(row)
+      );
+      if (!examRow) return;
+
+      const answer = examRow[qCol];
+      const code = String(student.Code);
+      const correctAnswers = correctMap[code]?.[idx] || [];
+      const isCorrect = correctAnswers.some(ca => ca === answer);
+
+      // Rest score = total score - this item's score
+      const restScore = student.Tot - (isCorrect ? POINTS_PER_Q : 0);
+
+      dataPoints.push({ correct: isCorrect, restScore });
+    });
+
+    if (dataPoints.length === 0) return 0;
+
+    // Separate into correct and incorrect groups
+    const correctGroup = dataPoints.filter(d => d.correct).map(d => d.restScore);
+    const incorrectGroup = dataPoints.filter(d => !d.correct).map(d => d.restScore);
+
+    if (correctGroup.length === 0 || incorrectGroup.length === 0) return 0;
+
+    const p = correctGroup.length / dataPoints.length;
+    const q = 1 - p;
+
+    const meanCorrect = mean(correctGroup);
+    const meanIncorrect = mean(incorrectGroup);
+    const allRestScores = dataPoints.map(d => d.restScore);
+    const sd = stdDev(allRestScores);
+
+    if (sd === 0) return 0;
+
+    // Point-biserial formula
+    const r_pb = ((meanCorrect - meanIncorrect) / sd) * Math.sqrt(p * q);
+
+    return r_pb;
+  });
+}
+
+/**
+ * Method H: Calculate KR-20 reliability for the test
+ */
+function computeKR20(
+  students: StudentResultWithRank[],
+  itemProportions: number[],
+  pointsPerQuestion: number = POINTS_PER_Q
+): number {
+  const k = itemProportions.length;
+  if (k === 0) return 0;
+
+  // Calculate variance of number of items correct (not total points)
+  // Convert Tot (in points) to number of items correct
+  const numCorrectScores = students.map(s => s.Tot / pointsPerQuestion);
+  const varianceTotal = Math.pow(stdDev(numCorrectScores), 2);
+
+  if (varianceTotal === 0) return 0;
+
+  // Sum of p * q for all items
+  const sumPQ = itemProportions.reduce((sum, p) => sum + p * (1 - p), 0);
+
+  // KR-20 formula
+  const kr20 = (k / (k - 1)) * (1 - sumPQ / varianceTotal);
+
+  return kr20;
+}
+
+/**
+ * Method C: Calculate distractor efficiency for each item
+ * Requires permutation data to decode options
+ */
+function computeDistractorEfficiencyPerItem(
+  students: StudentResultWithRank[],
+  answersData: ExamRow[],
+  itemAnalysis: ItemAnalysisRow[],
+  masterQ: number
+): number {
+  const N = students.length;
+  if (N === 0) return 0;
+
+  // Get mappings for this master question
+  const mappings = itemAnalysis.filter(ia => ia.order_in_master === masterQ);
+  if (mappings.length === 0) return 0;
+
+  // Count how many students selected each option
+  const optionCounts: { [option: string]: number } = {
+    'A': 0, 'B': 0, 'C': 0, 'D': 0, 'E': 0
+  };
+
+  students.forEach(student => {
+    const studentCode = String(student.Code);
+    const mapping = mappings.find(m => String(m.code) === studentCode);
+    if (!mapping || !mapping.permutation) return;
+
+    const examRow = answersData.find(
+      row => row.ID === student.ID && row.Code === student.Code && !isSolutionRow(row)
+    );
+    if (!examRow) return;
+
+    const versionQuestionCol = String(mapping.order);
+    const studentAnswer = examRow[versionQuestionCol];
+
+    // Decode to master option
+    const masterChoice = decodePermutation(studentAnswer, mapping.permutation);
+    if (masterChoice && masterChoice !== 'Blank/Other' && optionCounts[masterChoice] !== undefined) {
+      optionCounts[masterChoice]++;
+    }
+  });
+
+  // Get correct answer in master terms by decoding through permutation
+  let masterCorrect: string = 'A';
+  for (const mapping of mappings) {
+    if (mapping.correct && mapping.permutation) {
+      const choices = ['A', 'B', 'C', 'D', 'E'];
+      const permArray = mapping.permutation.toUpperCase().split('');
+      const correctIndex = choices.indexOf(mapping.correct.toUpperCase());
+      if (correctIndex !== -1 && correctIndex < permArray.length) {
+        masterCorrect = permArray[correctIndex];
+        break;
+      }
+    }
+  }
+
+  // Count functional distractors (those selected by >= 5% of students)
+  let functionalCount = 0;
+  const threshold = N * 0.05;
+
+  ['A', 'B', 'C', 'D', 'E'].forEach(option => {
+    if (option !== masterCorrect && optionCounts[option] >= threshold) {
+      functionalCount++;
+    }
+  });
+
+  // DE = (functional distractors / total distractors) * 100
+  const totalDistractors = 4; // For 5-option questions
+  const DE = (functionalCount / totalDistractors) * 100;
+
+  return DE;
+}
+
+/**
+ * Method I: Determine item decision (Keep/Revise/Investigate)
+ */
+function determineItemDecision(
+  p_i: number,
+  r_pb: number,
+  D_i: number,
+  DE: number
+): { decision: 'KEEP' | 'REVISE' | 'INVESTIGATE'; reason: string } {
+  // Investigate immediately if r_pb or D_i is negative
+  if (r_pb < 0 || D_i < 0) {
+    return {
+      decision: 'INVESTIGATE',
+      reason: r_pb < 0
+        ? 'Negative point-biserial (possible wrong key or flawed item)'
+        : 'Negative discrimination (low scorers outperform high scorers)'
+    };
+  }
+
+  // Keep if good stats
+  if (p_i >= 0.30 && p_i <= 0.80 && r_pb >= 0.20 && DE >= 75) {
+    return {
+      decision: 'KEEP',
+      reason: 'Good difficulty, discrimination, and distractor efficiency'
+    };
+  }
+
+  // Revise if any issues
+  const reasons: string[] = [];
+
+  if (p_i > 0.80 && DE <= 50) {
+    reasons.push('Too easy with weak distractors');
+  } else if (p_i > 0.80) {
+    reasons.push('Too easy');
+  }
+
+  if (p_i < 0.30) {
+    reasons.push('Too difficult');
+  }
+
+  if (r_pb < 0.20) {
+    reasons.push('Weak discrimination');
+  }
+
+  if (DE < 75) {
+    reasons.push('Poor distractor efficiency');
+  }
+
+  if (reasons.length > 0) {
+    return {
+      decision: 'REVISE',
+      reason: reasons.join('; ')
+    };
+  }
+
+  return {
+    decision: 'KEEP',
+    reason: 'Acceptable performance'
+  };
+}
+
+/**
+ * Method E & G: Calculate option-level statistics (D_ij and r_pb for each option)
+ * For a specific master question
+ */
+function computeOptionStatistics(
+  students: StudentResultWithRank[],
+  answersData: ExamRow[],
+  itemAnalysis: ItemAnalysisRow[],
+  masterQ: number
+): import('@/types/exam').OptionStatistics[] {
+  const N = students.length;
+  if (N === 0) return [];
+
+  // Get mappings for this master question
+  const mappings = itemAnalysis.filter(ia => ia.order_in_master === masterQ);
+  if (mappings.length === 0) return [];
+
+  // Determine the correct answer in master terms by decoding through permutation
+  let masterCorrect: string | null = null;
+  for (const mapping of mappings) {
+    if (mapping.correct && mapping.permutation) {
+      // Find which master option corresponds to the correct answer in this version
+      const choices = ['A', 'B', 'C', 'D', 'E'];
+      const permArray = mapping.permutation.toUpperCase().split('');
+      const correctIndex = choices.indexOf(mapping.correct.toUpperCase());
+      if (correctIndex !== -1 && correctIndex < permArray.length) {
+        masterCorrect = permArray[correctIndex];
+        break;
+      }
+    }
+  }
+
+  if (!masterCorrect) {
+    masterCorrect = 'A'; // Fallback
+  }
+
+  // Initialize option counts and quartile counts
+  const optionData: { [option: string]: {
+    count: number;
+    T1: number;
+    T2: number;
+    T3: number;
+    T4: number;
+    studentsWhoSelected: StudentResultWithRank[];
+  }} = {};
+
+  ['A', 'B', 'C', 'D', 'E', 'Blank/Other'].forEach(opt => {
+    optionData[opt] = { count: 0, T1: 0, T2: 0, T3: 0, T4: 0, studentsWhoSelected: [] };
+  });
+
+  // Count selections
+  students.forEach(student => {
+    const studentCode = String(student.Code);
+    const mapping = mappings.find(m => String(m.code) === studentCode);
+    if (!mapping || !mapping.permutation) return;
+
+    const examRow = answersData.find(
+      row => row.ID === student.ID && row.Code === student.Code && !isSolutionRow(row)
+    );
+    if (!examRow) return;
+
+    const versionQuestionCol = String(mapping.order);
+    const studentAnswer = examRow[versionQuestionCol];
+
+    // Decode to master option
+    const masterChoice = decodePermutation(studentAnswer, mapping.permutation);
+
+    if (optionData[masterChoice]) {
+      optionData[masterChoice].count++;
+      optionData[masterChoice][student.Rank]++;
+      optionData[masterChoice].studentsWhoSelected.push(student);
+    }
+  });
+
+  // Calculate upper-lower groups (27%)
+  const sorted = [...students].sort((a, b) => b.Tot - a.Tot);
+  const n = sorted.length;
+  const cutoff = Math.ceil(n * 0.27);
+  const upperGroup = sorted.slice(0, cutoff);
+  const lowerGroup = sorted.slice(-cutoff);
+
+  const totalAnswered = Object.values(optionData).reduce((sum, d) => sum + d.count, 0);
+
+  // Build result for each option
+  return ['A', 'B', 'C', 'D', 'E', 'Blank/Other'].map(option => {
+    const data = optionData[option];
+    const p_ij = totalAnswered > 0 ? data.count / totalAnswered : 0;
+
+    // Calculate D_ij (upper-lower discrimination for this option)
+    const upperSelected = data.studentsWhoSelected.filter(s =>
+      upperGroup.some(u => u.ID === s.ID && u.Code === s.Code)
+    ).length;
+    const lowerSelected = data.studentsWhoSelected.filter(s =>
+      lowerGroup.some(l => l.ID === s.ID && l.Code === s.Code)
+    ).length;
+
+    const pUpper = upperGroup.length > 0 ? upperSelected / upperGroup.length : 0;
+    const pLower = lowerGroup.length > 0 ? lowerSelected / lowerGroup.length : 0;
+    const D_ij = pUpper - pLower;
+
+    // Calculate r_pb for this option (point-biserial with rest score)
+    let r_pb = 0;
+    if (data.studentsWhoSelected.length > 0 && data.studentsWhoSelected.length < students.length) {
+      const restScoresSelected = data.studentsWhoSelected.map(s => {
+        // Rest score = total score (we don't subtract this option since we're measuring option selection, not correctness)
+        return s.Tot;
+      });
+      const restScoresNotSelected = students
+        .filter(s => !data.studentsWhoSelected.some(sel => sel.ID === s.ID && sel.Code === s.Code))
+        .map(s => s.Tot);
+
+      const meanSelected = mean(restScoresSelected);
+      const meanNotSelected = mean(restScoresNotSelected);
+      const allScores = students.map(s => s.Tot);
+      const sd = stdDev(allScores);
+
+      const p = data.studentsWhoSelected.length / students.length;
+      const q = 1 - p;
+
+      if (sd > 0) {
+        r_pb = ((meanSelected - meanNotSelected) / sd) * Math.sqrt(p * q);
+      }
+    }
+
+    const isFunctional = option !== 'Blank/Other' && option !== masterCorrect && p_ij >= 0.05;
+
+    return {
+      questionNumber: masterQ,
+      option,
+      isCorrect: option === masterCorrect,
+      p_ij,
+      D_ij,
+      r_pb,
+      count: data.count,
+      percentage: totalAnswered > 0 ? (data.count / totalAnswered) * 100 : 0,
+      T1: data.T1,
+      T2: data.T2,
+      T3: data.T3,
+      T4: data.T4,
+      isFunctional
+    };
+  });
+}
+
+/**
+ * Main orchestrator: Compute comprehensive item analysis
+ * This is the main exported function that the UI will call
+ */
+export function computeComprehensiveItemAnalysis(
+  answersData: ExamRow[],
+  itemAnalysisData: ItemAnalysisRow[],
+  numQuestions: number
+): import('@/types/exam').ComprehensiveItemAnalysisResult {
+  // Get question columns and correct answers map
+  const qCols = getAllQuestionCols(answersData).slice(0, numQuestions);
+  const correctMap = buildCorrectAnswersMap(answersData, qCols);
+
+  // Get student results with scores (always use POINTS_PER_Q for consistency)
+  const studentResults = computeResults(answersData, qCols, correctMap);
+
+  // Classify students into quartiles
+  const rankedStudents = classifyStudentsByQuartile(studentResults);
+
+  // Calculate item-level metrics
+  const itemProportions = computeItemDifficulty(rankedStudents, answersData, qCols, correctMap);
+  const discriminationIndices = computeUpperLowerDiscrimination(rankedStudents, answersData, qCols, correctMap);
+  const pointBiserials = computeItemPointBiserial(rankedStudents, answersData, qCols, correctMap);
+
+  // Calculate KR-20 (always use POINTS_PER_Q to convert scores to number of items correct)
+  const kr20 = computeKR20(rankedStudents, itemProportions, POINTS_PER_Q);
+
+  // Build item statistics
+  const itemStatistics: import('@/types/exam').ItemStatistics[] = [];
+  const allOptionStatistics: import('@/types/exam').OptionStatistics[] = [];
+
+  for (let i = 0; i < numQuestions; i++) {
+    const masterQ = i + 1;
+    const p_i = itemProportions[i];
+    const D_i = discriminationIndices[i];
+    const r_pb = pointBiserials[i];
+
+    // Calculate distractor efficiency for this item
+    const DE = computeDistractorEfficiencyPerItem(rankedStudents, answersData, itemAnalysisData, masterQ);
+
+    // Determine decision
+    const { decision, reason } = determineItemDecision(p_i, r_pb, D_i, DE);
+
+    itemStatistics.push({
+      questionNumber: masterQ,
+      p_i,
+      D_i,
+      r_pb,
+      DE,
+      decision,
+      decisionReason: reason
+    });
+
+    // Compute option-level statistics
+    const optionStats = computeOptionStatistics(rankedStudents, answersData, itemAnalysisData, masterQ);
+    allOptionStatistics.push(...optionStats);
+  }
+
+  // Calculate test summary
+  const totalScores = rankedStudents.map(s => s.Tot);
+  const testSummary: import('@/types/exam').TestSummary = {
+    totalItems: numQuestions,
+    totalStudents: rankedStudents.length,
+    meanScore: mean(totalScores),
+    stdDevScore: stdDev(totalScores),
+    meanDifficulty: mean(itemProportions),
+    meanDiscrimination: mean(discriminationIndices),
+    KR20: kr20,
+    itemsToKeep: itemStatistics.filter(s => s.decision === 'KEEP').length,
+    itemsToRevise: itemStatistics.filter(s => s.decision === 'REVISE').length,
+    itemsToInvestigate: itemStatistics.filter(s => s.decision === 'INVESTIGATE').length
+  };
+
+  return {
+    testSummary,
+    itemStatistics,
+    optionStatistics: allOptionStatistics
+  };
 }

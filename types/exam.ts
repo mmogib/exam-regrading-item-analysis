@@ -87,3 +87,51 @@ export interface DistractorAnalysisResult {
   masterQuestion: number;
   choices: DistractorChoiceResult[];
 }
+
+// Comprehensive Item Analysis types
+export type ItemDecision = 'KEEP' | 'REVISE' | 'INVESTIGATE';
+
+export interface ItemStatistics {
+  questionNumber: number;           // Master question number
+  p_i: number;                       // Item difficulty (proportion correct)
+  D_i: number;                       // Upper-lower discrimination index
+  r_pb: number;                      // Point-biserial correlation (item-level)
+  DE: number;                        // Distractor efficiency (0-100%)
+  decision: ItemDecision;            // Keep/Revise/Investigate
+  decisionReason?: string;           // Why this decision was made
+}
+
+export interface OptionStatistics {
+  questionNumber: number;            // Master question number
+  option: string;                    // A, B, C, D, E, or "Blank/Other"
+  isCorrect: boolean;                // Whether this is the correct answer
+  p_ij: number;                      // Proportion selecting this option
+  D_ij: number;                      // Upper-lower discrimination for this option
+  r_pb: number;                      // Point-biserial correlation for this option
+  count: number;                     // Total students who chose this
+  percentage: number;                // Percentage of students who chose this
+  T1: number;                        // Count from top 25%
+  T2: number;                        // Count from second 25%
+  T3: number;                        // Count from third 25%
+  T4: number;                        // Count from bottom 25%
+  isFunctional?: boolean;            // Whether this distractor is functional (p_ij >= 0.05)
+}
+
+export interface TestSummary {
+  totalItems: number;                // Total number of items
+  totalStudents: number;             // Total number of students
+  meanScore: number;                 // Mean test score
+  stdDevScore: number;               // Standard deviation of test scores
+  meanDifficulty: number;            // Mean p_i across all items
+  meanDiscrimination: number;        // Mean D_i across all items
+  KR20: number;                      // KR-20 reliability coefficient
+  itemsToKeep: number;               // Count of items with decision = KEEP
+  itemsToRevise: number;             // Count of items with decision = REVISE
+  itemsToInvestigate: number;        // Count of items with decision = INVESTIGATE
+}
+
+export interface ComprehensiveItemAnalysisResult {
+  testSummary: TestSummary;
+  itemStatistics: ItemStatistics[];
+  optionStatistics: OptionStatistics[];
+}
