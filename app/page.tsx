@@ -3,11 +3,12 @@
 import { useState } from "react";
 import { RegradingTab } from "@/components/re-grading";
 import { UncodingTab } from "@/components/uncoding";
-import { GraduationCap, RefreshCw, BarChart3, Home as HomeIcon } from "lucide-react";
+import { ItemAnalysisTab } from "@/components/item-analysis";
+import { GraduationCap, RefreshCw, BarChart3, Home as HomeIcon, LineChart } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
-type View = 'home' | 'regrading' | 'analysis';
+type View = 'home' | 'regrading' | 'analysis' | 'item-analysis';
 
 export default function Home() {
   const [currentView, setCurrentView] = useState<View>('home');
@@ -69,6 +70,15 @@ export default function Home() {
               <BarChart3 className="h-4 w-4" />
               Cross-Version Analysis
             </Button>
+            <span className="text-muted-foreground">|</span>
+            <Button
+              variant={currentView === 'item-analysis' ? 'default' : 'ghost'}
+              onClick={() => setCurrentView('item-analysis')}
+              className="gap-2"
+            >
+              <LineChart className="h-4 w-4" />
+              Item Analysis
+            </Button>
           </div>
         </nav>
 
@@ -81,7 +91,7 @@ export default function Home() {
                 <p className="text-muted-foreground">Select the functionality you need</p>
               </div>
 
-              <div className="grid md:grid-cols-2 gap-6 max-w-5xl mx-auto">
+              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-7xl mx-auto">
                 {/* Re-grading Card */}
                 <Card className="border-2 border-green-200 dark:border-green-800 hover:shadow-xl transition-shadow cursor-pointer group">
                   <CardHeader className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/30 dark:to-emerald-950/30">
@@ -177,6 +187,54 @@ export default function Home() {
                     </Button>
                   </CardContent>
                 </Card>
+
+                {/* Item Analysis Card */}
+                <Card className="border-2 border-orange-200 dark:border-orange-800 hover:shadow-xl transition-shadow cursor-pointer group">
+                  <CardHeader className="bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-950/30 dark:to-amber-950/30">
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className="p-3 bg-orange-100 dark:bg-orange-900/50 rounded-lg group-hover:scale-110 transition-transform">
+                        <LineChart className="h-8 w-8 text-orange-600 dark:text-orange-400" />
+                      </div>
+                      <CardTitle className="text-2xl text-orange-900 dark:text-orange-100">
+                        Item Analysis
+                      </CardTitle>
+                    </div>
+                    <CardDescription className="text-orange-700 dark:text-orange-300 text-base">
+                      Comprehensive psychometric analysis and distractor evaluation
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="pt-6 space-y-4">
+                    <ul className="space-y-2 text-sm text-muted-foreground">
+                      <li className="flex items-start gap-2">
+                        <span className="text-orange-600 dark:text-orange-400 mt-0.5">✓</span>
+                        <span>Upload exam data and item analysis file</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-orange-600 dark:text-orange-400 mt-0.5">✓</span>
+                        <span>Distractor analysis by performance quartiles</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-orange-600 dark:text-orange-400 mt-0.5">✓</span>
+                        <span>Identify problematic distractors and answer choices</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-orange-600 dark:text-orange-400 mt-0.5">✓</span>
+                        <span>Requires QUESTIONS_MAP format with permutation data</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-orange-600 dark:text-orange-400 mt-0.5">✓</span>
+                        <span>Export detailed item analysis to Excel</span>
+                      </li>
+                    </ul>
+                    <Button
+                      onClick={() => setCurrentView('item-analysis')}
+                      className="w-full bg-orange-600 hover:bg-orange-700 text-white"
+                      size="lg"
+                    >
+                      Start Item Analysis
+                    </Button>
+                  </CardContent>
+                </Card>
               </div>
             </div>
           )}
@@ -190,6 +248,12 @@ export default function Home() {
           {currentView === 'analysis' && (
             <div className="space-y-6">
               <UncodingTab />
+            </div>
+          )}
+
+          {currentView === 'item-analysis' && (
+            <div className="space-y-6">
+              <ItemAnalysisTab />
             </div>
           )}
         </div>
