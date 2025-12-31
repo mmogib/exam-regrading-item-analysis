@@ -10,15 +10,168 @@ import {
   CodeAverageResult,
   DistractorAnalysisResult,
   DistractorChoiceResult,
-  SOLUTION_ID,
-  SOLUTION_SECTION,
   ANS_CHOICES,
   POINTS_PER_Q,
   AnswerChoice,
   CSVDetectionResult,
   ColumnMapping,
+  ColumnDetectionResult,
 } from "@/types/exam";
 import { debug, error as logError } from "./logger";
+
+/**
+ * Fuzzy column matching functions
+ */
+
+/**
+ * Fuzzy match for ID column
+ */
+function fuzzyMatchID(colName: string): boolean {
+  const normalized = colName.toLowerCase().replace(/[_\s-]/g, '');
+  return (
+    normalized === 'id' ||
+    normalized === 'studentid' ||
+    normalized.includes('stdid') ||
+    normalized === 'matric' ||
+    normalized === 'matriculation' ||
+    normalized.includes('studentnumber')
+  );
+}
+
+/**
+ * Fuzzy match for Code column
+ */
+function fuzzyMatchCode(colName: string): boolean {
+  const normalized = colName.toLowerCase().replace(/[_\s-]/g, '');
+  return (
+    normalized === 'code' ||
+    normalized === 'version' ||
+    normalized.includes('examcode') ||
+    normalized.includes('formcode') ||
+    normalized.includes('examversion')
+  );
+}
+
+/**
+ * Fuzzy match for Question column
+ * Returns the question number if matched, null otherwise
+ */
+function fuzzyMatchQuestion(colName: string): number | null {
+  const normalized = colName.trim();
+
+  // Pure numeric: "1", "2", "3"
+  if (/^\d+$/.test(normalized)) {
+    return parseInt(normalized);
+  }
+
+  // Q1, Q2, Q3 (case insensitive)
+  const qMatch = normalized.match(/^q\.?\s*(\d+)$/i);
+  if (qMatch) return parseInt(qMatch[1]);
+
+  // Question 1, Question 2 (case insensitive)
+  const questionMatch = normalized.match(/^question\.?\s*(\d+)$/i);
+  if (questionMatch) return parseInt(questionMatch[1]);
+
+  // Ques 1, Ques1 (case insensitive)
+  const quesMatch = normalized.match(/^ques\.?\s*(\d+)$/i);
+  if (quesMatch) return parseInt(quesMatch[1]);
+
+  return null; // Not a question column
+}
+
+/**
+ * Detect and map columns using fuzzy matching
+ */
+export function detectColumns(data: any[]): ColumnDetectionResult {
+  const errors: string[] = [];
+
+  if (!data || data.length === 0) {
+    return {
+      idColumn: null,
+      codeColumn: null,
+      questionColumns: [],
+      allColumns: [],
+      valid: false,
+      errors: ['File is empty']
+    };
+  }
+
+  const firstRow = data[0];
+  const allColumns = Object.keys(firstRow);
+
+  // Try to find ID column
+  let idColumn: string | null = null;
+  for (const col of allColumns) {
+    if (fuzzyMatchID(col)) {
+      idColumn = col;
+      break;
+    }
+  }
+
+  // Try to find Code column
+  let codeColumn: string | null = null;
+  for (const col of allColumns) {
+    if (fuzzyMatchCode(col)) {
+      codeColumn = col;
+      break;
+    }
+  }
+
+  // Try to find Question columns (only non-empty ones with valid answers)
+  const questionColumns: { name: string; number: number }[] = [];
+  for (const col of allColumns) {
+    const questionNum = fuzzyMatchQuestion(col);
+    if (questionNum !== null) {
+      // Check if this column has any non-empty values with valid answer choices
+      const hasValidData = data.some(row => {
+        const value = String(row[col] || '').trim().toUpperCase();
+        return value.length > 0 && /^[A-E]+$/.test(value);
+      });
+
+      if (hasValidData) {
+        questionColumns.push({ name: col, number: questionNum });
+      }
+    }
+  }
+
+  // Sort question columns by question number
+  questionColumns.sort((a, b) => a.number - b.number);
+
+  // Validate ID column
+  if (!idColumn) {
+    errors.push('Could not detect ID column. Please map it manually.');
+  }
+
+  // Validate Code column
+  if (!codeColumn) {
+    errors.push('Could not detect Code column. Please map it manually.');
+  }
+
+  // Validate question columns
+  if (questionColumns.length === 0) {
+    errors.push('Could not detect any question columns. Please map them manually.');
+  } else {
+    // Check if questions are sequential (1, 2, 3, ..., N) with no gaps
+    for (let i = 0; i < questionColumns.length; i++) {
+      if (questionColumns[i].number !== i + 1) {
+        errors.push(
+          `Question columns are not sequential. Expected question ${i + 1}, found question ${questionColumns[i].number}. ` +
+          'Please fix your file to have sequential question numbers (1, 2, 3, ...) with no gaps, then re-upload.'
+        );
+        break;
+      }
+    }
+  }
+
+  return {
+    idColumn,
+    codeColumn,
+    questionColumns,
+    allColumns,
+    valid: errors.length === 0,
+    errors
+  };
+}
 
 /**
  * Read Excel file and convert to ExamRow array
@@ -123,96 +276,108 @@ export async function readExamDataFromCSV(file: File): Promise<ExamRow[]> {
 }
 
 /**
- * Read exam data file (auto-detect Excel or CSV/TXT)
+ * Read exam data file with column detection (for mapping UI)
+ * Returns raw data and detection results
  */
-export async function readExamDataFile(file: File): Promise<ExamRow[]> {
+export async function readExamDataFileWithDetection(file: File): Promise<{
+  rawData: any[];
+  detection: ColumnDetectionResult;
+}> {
   const fileName = file.name.toLowerCase();
 
-  if (fileName.endsWith(".csv") || fileName.endsWith(".txt")) {
-    return readExamDataFromCSV(file);
-  } else if (fileName.endsWith(".xls") || fileName.endsWith(".xlsx")) {
-    return readExcelFile(file);
-  } else {
-    throw new Error(
-      "Unsupported file format. Please upload .xls, .xlsx, .csv, or .txt file."
-    );
-  }
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = (e) => {
+      try {
+        let workbook: XLSX.WorkBook;
+
+        if (fileName.endsWith(".csv") || fileName.endsWith(".txt")) {
+          const text = e.target?.result as string;
+          workbook = XLSX.read(text, { type: "string", raw: true });
+        } else if (fileName.endsWith(".xls") || fileName.endsWith(".xlsx")) {
+          const data = new Uint8Array(e.target?.result as ArrayBuffer);
+          workbook = XLSX.read(data, { type: "array" });
+        } else {
+          reject(new Error("Unsupported file format. Please upload .xls, .xlsx, .csv, or .txt file."));
+          return;
+        }
+
+        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+
+        // Get column order
+        const range = XLSX.utils.decode_range(firstSheet["!ref"] || "A1");
+        const headers: string[] = [];
+        for (let col = range.s.c; col <= range.e.c; col++) {
+          const cellAddress = XLSX.utils.encode_cell({ r: range.s.r, c: col });
+          const cell = firstSheet[cellAddress];
+          if (cell && cell.v) {
+            headers.push(String(cell.v));
+          }
+        }
+        originalColumnOrder = headers;
+
+        const rawData = XLSX.utils.sheet_to_json(firstSheet, { defval: "" });
+        const detection = detectColumns(rawData);
+
+        resolve({ rawData, detection });
+      } catch (error) {
+        reject(error);
+      }
+    };
+
+    reader.onerror = reject;
+
+    if (fileName.endsWith(".csv") || fileName.endsWith(".txt")) {
+      reader.readAsText(file);
+    } else {
+      reader.readAsArrayBuffer(file);
+    }
+  });
 }
 
 /**
- * Validate exam data format
+ * Apply column mapping and normalize data
+ */
+export function applyColumnMapping(rawData: any[], detection: ColumnDetectionResult): ExamRow[] {
+  if (!detection.valid || !detection.idColumn || !detection.codeColumn) {
+    throw new Error("Invalid column detection. Cannot normalize data.");
+  }
+
+  return normalizeImportData(rawData, {
+    idColumn: detection.idColumn,
+    codeColumn: detection.codeColumn,
+    questionColumns: detection.questionColumns
+  });
+}
+
+/**
+ * Read exam data file (auto-detect Excel or CSV/TXT)
+ * DEPRECATED: Use readExamDataFileWithDetection for better column mapping support
+ */
+export async function readExamDataFile(file: File): Promise<ExamRow[]> {
+  const { rawData, detection } = await readExamDataFileWithDetection(file);
+
+  if (!detection.valid) {
+    throw new Error(detection.errors.join("\n"));
+  }
+
+  return applyColumnMapping(rawData, detection);
+}
+
+/**
+ * Validate exam data format using fuzzy column detection
  * Returns {valid: boolean, errors: string[]}
  */
 export function validateExamDataFormat(data: any[]): {
   valid: boolean;
   errors: string[];
 } {
-  const errors: string[] = [];
-
-  if (!data || data.length === 0) {
-    errors.push("File is empty");
-    return { valid: false, errors };
-  }
-
-  const firstRow = data[0];
-  const actualColumns = Object.keys(firstRow);
-  const requiredColumns = ["ID", "Code"];
-
-  // Check for required columns with helpful suggestions
-  requiredColumns.forEach((col) => {
-    if (!(col in firstRow)) {
-      // Look for similar column names to provide helpful suggestions
-      const similarCols = actualColumns.filter(
-        (actualCol) =>
-          actualCol.toLowerCase().includes(col.toLowerCase()) ||
-          col.toLowerCase().includes(actualCol.toLowerCase())
-      );
-
-      if (similarCols.length > 0) {
-        errors.push(
-          `Missing required column: "${col}". Found similar column(s): ${similarCols
-            .map((c) => `"${c}"`)
-            .join(", ")}. Please use the exact column name "${col}".`
-        );
-      } else {
-        errors.push(`Missing required column: "${col}".`);
-      }
-    }
-  });
-
-  // If there are missing required columns, add guidance
-  if (errors.length > 0) {
-    errors.push("");
-    errors.push("Expected column format: ID, Code, 1, 2, 3, ...");
-    errors.push(
-      "Please download the template for the correct format or check your column names match exactly."
-    );
-  }
-
-  // Check for at least one question column (numeric column)
-  const questionCols = Object.keys(firstRow).filter(
-    (key) =>
-      !["form", "ID", "Section", "Code"].includes(key) && /^\d+$/.test(key)
-  );
-
-  if (questionCols.length === 0) {
-    errors.push(
-      "No question columns found. Expected numeric columns like 1, 2, 3, etc."
-    );
-  }
-
-  // Check for solution rows (warning only - optional for some workflows)
-  const solutionRows = data.filter((row) => {
-    const id = String(row.ID || "").trim();
-    return id === "000000000" || id === "0";
-  });
-
-  // Solution rows are optional - don't error if missing
-  // The app will still work for analysis, just not for re-grading
-
+  // Use the new column detection logic
+  const detection = detectColumns(data);
   return {
-    valid: errors.length === 0,
-    errors,
+    valid: detection.valid,
+    errors: detection.errors
   };
 }
 
@@ -307,39 +472,49 @@ function detectCSVFormat(data: any[]): CSVDetectionResult {
 }
 
 /**
- * Normalize import_test_data
+ * Normalize import_test_data with column mapping
  */
-function normalizeImportData(data: any[]): ExamRow[] {
+function normalizeImportData(data: any[], columnMapping?: { idColumn: string; codeColumn: string; questionColumns: { name: string; number: number }[] }): ExamRow[] {
   if (data.length === 0) throw new Error("Empty file");
 
   return data.map((row, idx) => {
     const normalized: ExamRow = {
-      form: String(row.form || ""),
-      ID: String(row.ID || ""),
-      Section: String(row.Section || ""),
-      Code: String(row.Code || ""),
+      ID: columnMapping ? String(row[columnMapping.idColumn] || "") : String(row.ID || ""),
+      Code: columnMapping ? String(row[columnMapping.codeColumn] || "") : String(row.Code || ""),
     };
 
-    // Pad IDs and Sections only if they're purely numeric
+    // Pad IDs only if they're purely numeric
     if (/^\d+$/.test(normalized.ID)) {
       normalized.ID = normalized.ID.padStart(9, "0");
     }
-    if (/^\d+$/.test(normalized.Section)) {
-      normalized.Section = normalized.Section.padStart(2, "0");
-    }
 
     // Process question columns
-    Object.keys(row).forEach((key) => {
-      if (!["form", "ID", "Section", "Code"].includes(key)) {
-        let value = String(row[key] || "").toUpperCase();
+    if (columnMapping && columnMapping.questionColumns.length > 0) {
+      // Use mapped question columns - normalize column names to sequential numbers
+      columnMapping.questionColumns.forEach(({ name, number }) => {
+        const questionKey = String(number); // Use question number as key (1, 2, 3, ...)
+        let value = String(row[name] || "").toUpperCase();
         // Keep only A-E letters (solutions may be concatenated like "ABE")
         if (value && /^[A-E]+$/.test(value)) {
-          normalized[key] = value;
+          normalized[questionKey] = value;
         } else {
-          normalized[key] = "";
+          normalized[questionKey] = "";
         }
-      }
-    });
+      });
+    } else {
+      // Fallback: process numeric column names only (old behavior for backwards compatibility)
+      Object.keys(row).forEach((key) => {
+        if (!["ID", "Code"].includes(key) && /^\d+$/.test(key)) {
+          let value = String(row[key] || "").toUpperCase();
+          // Keep only A-E letters (solutions may be concatenated like "ABE")
+          if (value && /^[A-E]+$/.test(value)) {
+            normalized[key] = value;
+          } else {
+            normalized[key] = "";
+          }
+        }
+      });
+    }
 
     return normalized;
   });
@@ -478,7 +653,7 @@ export function getAllQuestionCols(data: ExamRow[]): string[] {
   if (data.length === 0) return [];
   const firstRow = data[0];
   const qCols = Object.keys(firstRow).filter(
-    (key) => !["form", "ID", "Section", "Code"].includes(key)
+    (key) => !["ID", "Code"].includes(key)
   );
 
   // Try to sort numerically
@@ -528,14 +703,25 @@ export function guessNumQuestions(data: ExamRow[]): number {
 
 /**
  * Check if a row is a solution row
- * Solution rows are identified by:
- * - ID = "000000000" (ITC format) OR empty ID (custom format)
- * - Section field is NOT checked to avoid issues with typos
+ * Solution rows are identified by Code column being a variation of "0" (0, 00, 000, 0000, etc.)
+ * OR by ID being "000000000", "0", or empty (for backwards compatibility)
  * EXPORTED for use in components
  */
 export function isSolutionRow(row: ExamRow): boolean {
-  const id = row.ID.trim();
-  return id === SOLUTION_ID || id === "" || id === "0";
+  const code = String(row.Code || '').trim();
+  const id = String(row.ID || '').trim();
+
+  // Check Code first (new format): Code = "0", "00", "000", etc.
+  if (/^0+$/.test(code)) {
+    return true;
+  }
+
+  // Fallback to ID check (old format): ID = "000000000", "0", or empty
+  if (id === '000000000' || id === '0' || id === '') {
+    return true;
+  }
+
+  return false;
 }
 
 /**
@@ -640,7 +826,6 @@ export function computeResults(
 
     return {
       ID: student.ID,
-      Section: student.Section,
       Code: student.Code,
       Tot: totalScore,
       Per: Math.round(percentage * 100) / 100,

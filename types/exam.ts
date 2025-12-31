@@ -1,21 +1,25 @@
-export const SOLUTION_ID = "000000000";
-export const SOLUTION_SECTION = "00";
 export const ANS_CHOICES = ["A", "B", "C", "D", "E"] as const;
 export const POINTS_PER_Q = 5;
 
 export type AnswerChoice = typeof ANS_CHOICES[number];
 
 export interface ExamRow {
-  form: string;
   ID: string;
-  Section: string;
   Code: string;
   [key: string]: string; // Question columns are dynamic
 }
 
+export interface ColumnDetectionResult {
+  idColumn: string | null;
+  codeColumn: string | null;
+  questionColumns: { name: string; number: number }[];
+  allColumns: string[];
+  valid: boolean;
+  errors: string[];
+}
+
 export interface StudentResult {
   ID: string;
-  Section: string;
   Code: string;
   Tot: number;
   Per: number;

@@ -8,9 +8,8 @@ export function generateExamTemplate(): void {
   // Template data matching the required format
   const templateData = [
     {
-      ID: '000000000',
-      Section: '00',
-      Code: '005',
+      ID: 'Solution-005',
+      Code: '0',
       '1': 'A',
       '2': 'E',
       '3': 'A',
@@ -27,9 +26,8 @@ export function generateExamTemplate(): void {
       '14': 'C'
     },
     {
-      ID: '000000000',
-      Section: '00',
-      Code: '006',
+      ID: 'Solution-006',
+      Code: '0',
       '1': 'E',
       '2': 'E',
       '3': 'B',
@@ -47,7 +45,6 @@ export function generateExamTemplate(): void {
     },
     {
       ID: '100306520',
-      Section: '02',
       Code: '005',
       '1': 'D',
       '2': 'D',
@@ -66,7 +63,6 @@ export function generateExamTemplate(): void {
     },
     {
       ID: '100704682',
-      Section: '01',
       Code: '005',
       '1': 'B',
       '2': 'D',
@@ -85,8 +81,8 @@ export function generateExamTemplate(): void {
     }
   ];
 
-  // Define column order: ID, Section, Code, then question numbers
-  const headers = ['ID', 'Section', 'Code', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14'];
+  // Define column order: ID, Code, then question numbers
+  const headers = ['ID', 'Code', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14'];
 
   // Create workbook and worksheet with specified column order
   const wb = XLSX.utils.book_new();

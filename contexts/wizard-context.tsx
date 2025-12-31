@@ -9,6 +9,7 @@ const STORAGE_VERSION = 1;
 export interface WizardState {
   // Step 1: Student Data
   studentData: ExamRow[] | null;
+  studentDataFileName: string | null;
   numQuestions: number;
 
   // Step 2: Re-grading
@@ -17,6 +18,7 @@ export interface WizardState {
 
   // Step 3: Item Analysis
   itemAnalysisData: ItemAnalysisRow[] | null;
+  itemAnalysisFileName: string | null;
   hasPermutation: boolean;
 
   // Metadata
@@ -26,9 +28,9 @@ export interface WizardState {
 
 interface WizardContextType {
   state: WizardState;
-  updateStudentData: (data: ExamRow[], numQuestions: number) => void;
+  updateStudentData: (data: ExamRow[], numQuestions: number, fileName: string) => void;
   updateCorrectAnswers: (correctMap: CorrectAnswersMap, regraded: boolean) => void;
-  updateItemAnalysis: (data: ItemAnalysisRow[], hasPermutation: boolean) => void;
+  updateItemAnalysis: (data: ItemAnalysisRow[], hasPermutation: boolean, fileName: string) => void;
   setCurrentStep: (step: number) => void;
   markStepComplete: (step: number) => void;
   resetWizard: () => void;
@@ -37,10 +39,12 @@ interface WizardContextType {
 
 const initialState: WizardState = {
   studentData: null,
+  studentDataFileName: null,
   numQuestions: 0,
   correctAnswersMap: null,
   hasRegraded: false,
   itemAnalysisData: null,
+  itemAnalysisFileName: null,
   hasPermutation: false,
   currentStep: 1,
   completedSteps: [],
@@ -88,10 +92,11 @@ export function WizardProvider({ children }: { children: ReactNode }) {
     saveToLocalStorage();
   }, [state]);
 
-  const updateStudentData = (data: ExamRow[], numQuestions: number) => {
+  const updateStudentData = (data: ExamRow[], numQuestions: number, fileName: string) => {
     setState((prev) => ({
       ...prev,
       studentData: data,
+      studentDataFileName: fileName,
       numQuestions,
     }));
   };
@@ -104,10 +109,11 @@ export function WizardProvider({ children }: { children: ReactNode }) {
     }));
   };
 
-  const updateItemAnalysis = (data: ItemAnalysisRow[], hasPermutation: boolean) => {
+  const updateItemAnalysis = (data: ItemAnalysisRow[], hasPermutation: boolean, fileName: string) => {
     setState((prev) => ({
       ...prev,
       itemAnalysisData: data,
+      itemAnalysisFileName: fileName,
       hasPermutation,
     }));
   };

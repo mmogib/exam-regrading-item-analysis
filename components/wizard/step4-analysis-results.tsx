@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Download, Calculator, AlertCircle, Info } from 'lucide-react';
+import { Download, Calculator, AlertCircle, Info, FileSpreadsheet, FileText } from 'lucide-react';
 import {
   computeAverageResults,
   computeCodeAverages,
@@ -134,6 +134,32 @@ export function Step4AnalysisResults() {
 
   return (
     <div className="space-y-6">
+      {/* Loaded Files Info */}
+      {(state.studentDataFileName || state.itemAnalysisFileName) && (
+        <Alert className="border-blue-200 bg-blue-50 dark:bg-blue-950/20">
+          <FileSpreadsheet className="h-4 w-4 text-blue-600" />
+          <AlertTitle className="text-blue-900 dark:text-blue-100">Loaded Files</AlertTitle>
+          <AlertDescription className="text-blue-800 dark:text-blue-200">
+            <div className="space-y-1 mt-1">
+              {state.studentDataFileName && (
+                <div className="flex items-center gap-2">
+                  <FileSpreadsheet className="h-3 w-3" />
+                  <span className="font-semibold">Student Data:</span>
+                  <span className="font-mono text-sm">{state.studentDataFileName}</span>
+                </div>
+              )}
+              {state.itemAnalysisFileName && (
+                <div className="flex items-center gap-2">
+                  <FileText className="h-3 w-3" />
+                  <span className="font-semibold">Item Analysis:</span>
+                  <span className="font-mono text-sm">{state.itemAnalysisFileName}</span>
+                </div>
+              )}
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
+
       {error && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />

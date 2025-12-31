@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Download, Check, AlertTriangle, Info } from 'lucide-react';
+import { Download, Check, AlertTriangle, Info, FileSpreadsheet } from 'lucide-react';
 import {
   getAllQuestionCols,
   getSolutionCodes,
@@ -104,6 +104,21 @@ export function Step2Regrading() {
 
   return (
     <div className="space-y-6">
+      {/* Loaded Files Info */}
+      {state.studentDataFileName && (
+        <Alert className="border-blue-200 bg-blue-50 dark:bg-blue-950/20">
+          <FileSpreadsheet className="h-4 w-4 text-blue-600" />
+          <AlertTitle className="text-blue-900 dark:text-blue-100">Loaded Files</AlertTitle>
+          <AlertDescription className="text-blue-800 dark:text-blue-200">
+            <div className="flex items-center gap-2 mt-1">
+              <FileSpreadsheet className="h-3 w-3" />
+              <span className="font-semibold">Student Data:</span>
+              <span className="font-mono text-sm">{state.studentDataFileName}</span>
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
+
       <Alert className="border-blue-200 bg-blue-50 dark:bg-blue-950/20">
         <Info className="h-4 w-4 text-blue-600" />
         <AlertTitle className="text-blue-900 dark:text-blue-100">Re-grading (Optional)</AlertTitle>
