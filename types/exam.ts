@@ -60,7 +60,7 @@ export interface CodeAverageResult {
 
 // CSV format detection types
 export interface CSVDetectionResult {
-  format: 'OLD' | 'NEW' | 'UNKNOWN';
+  format: 'OLD' | 'NEW' | 'WIDE' | 'UNKNOWN';
   columns: string[];
   data: any[];
 }

@@ -10,6 +10,7 @@ import {
   readCSVFileWithDetection,
   normalizeItemAnalysis,
   parseCSVWithMapping,
+  parseWideFormat,
   validateCorrectAnswers,
   isSolutionRow,
 } from '@/lib/excel-utils';
@@ -75,8 +76,12 @@ export function Step3UploadItemAnalysis() {
           order: detection.columns[1] || '',
           orderInMaster: detection.columns[2] || ''
         });
+      } else if (detection.format === 'WIDE') {
+        // Parse WIDE format first
+        const parsedData = parseWideFormat(detection.data, detection.columns);
+        await processItemAnalysis(file.name, parsedData, 'WIDE');
       } else {
-        // Auto-detected format - parse immediately
+        // Auto-detected format (OLD or NEW) - parse immediately
         await processItemAnalysis(file.name, detection.data, detection.format);
       }
     } catch (err: any) {
@@ -163,7 +168,16 @@ export function Step3UploadItemAnalysis() {
   };
 
   const processItemAnalysis = async (fileName: string, data: any[], format: string) => {
-    const parsedData = format === 'MAPPED' ? data : normalizeItemAnalysis(data, format as 'OLD' | 'NEW');
+    let parsedData: ItemAnalysisRow[];
+
+    if (format === 'MAPPED') {
+      parsedData = data;
+    } else if (format === 'WIDE') {
+      // WIDE format is already parsed by readCSVFileWithDetection
+      parsedData = data;
+    } else {
+      parsedData = normalizeItemAnalysis(data, format as 'OLD' | 'NEW');
+    }
 
     if (parsedData.length === 0) {
       setError('No valid rows found in item analysis file. Please check your data.');

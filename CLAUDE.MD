@@ -90,10 +90,12 @@ The application is a client-side only Next.js app with static export capability.
 ```typescript
 interface WizardState {
   studentData: ExamRow[] | null;
+  studentDataFileName: string | null;
   numQuestions: number;
   correctAnswersMap: CorrectAnswersMap | null;
   hasRegraded: boolean;
   itemAnalysisData: ItemAnalysisRow[] | null;
+  itemAnalysisFileName: string | null;
   hasPermutation: boolean;
   currentStep: number;
   completedSteps: number[];
@@ -248,6 +250,134 @@ className={`p-2 ${hasNoAnswer ? 'bg-yellow-100 border-2 border-yellow-400' : ''}
 ```
 
 **Result:** All questions display consistently with vertical checkbox stacking
+
+### File Display Feature (December 2025)
+**Shows uploaded filenames at each wizard step**
+
+**Feature:**
+- Blue info cards display loaded file names at top of steps
+- Step 2: Shows student data filename
+- Step 3: Shows student data filename
+- Step 4: Shows both student data AND item analysis filenames
+- Filenames stored in wizard state and persisted to localStorage
+
+**Implementation:**
+- Added `studentDataFileName` and `itemAnalysisFileName` to WizardState
+- Updated `updateStudentData()` and `updateItemAnalysis()` to save filenames
+- Info cards in Steps 2, 3, 4 with FileSpreadsheet/FileText icons
+- Consistent blue alert styling across all steps
+
+### Fuzzy Column Detection & Mapping for Student Data (December 2025)
+**Flexible column name support with automatic detection and manual mapping**
+
+**Problem solved:**
+- Files with different column names (e.g., "Student ID" vs "ID", "Version" vs "Code")
+- Question columns with various formats (1, 2, 3 vs Q1, Q2, Q3 vs Question 1, Question 2)
+- Extra empty columns that should be filtered out
+
+**Fuzzy Matching:**
+- **ID column:** Matches "id", "student id", "studentid", "std id", "matric", etc.
+- **Code column:** Matches "code", "version", "exam code", "form code", etc.
+- **Question columns:** Matches numeric ("1", "2"), Q-prefix ("Q1", "Q2"), Question prefix ("Question 1"), Ques prefix ("Ques1")
+
+**Question Validation:**
+- Filters out empty columns (only keeps columns with valid answers A-E)
+- Validates sequential numbering (1,2,3,...N with no gaps)
+- Error if non-sequential: Shows clear message to fix file
+
+**Manual Mapping UI:**
+- Appears when auto-detection fails (missing ID or Code)
+- User selects ID and Code columns from dropdowns
+- Shows all detected columns
+- Shows detected question count
+- Yellow-bordered card with clear instructions
+
+**Implementation:**
+- `detectColumns()` - Fuzzy matching and validation
+- `readExamDataFileWithDetection()` - Returns raw data + detection results
+- `applyColumnMapping()` - Normalizes data with column mapping
+- Updated Step 1 with mapping UI (similar to Step 3's code mapping)
+
+### Section Column Removal & Solution Row Detection Update (December 2025)
+**Removed Section column entirely and updated solution detection logic**
+
+**Changes:**
+- Removed `Section` field from `ExamRow` and `StudentResult` types
+- Removed `SOLUTION_ID` and `SOLUTION_SECTION` constants
+- Updated template generator (removed Section column)
+
+**Solution Row Detection (Backwards Compatible):**
+```typescript
+isSolutionRow(row: ExamRow): boolean {
+  const code = String(row.Code || '').trim();
+  const id = String(row.ID || '').trim();
+
+  // NEW format: Code = "0", "00", "000", etc.
+  if (/^0+$/.test(code)) return true;
+
+  // OLD format (backwards compatibility): ID = "000000000", "0", or empty
+  if (id === '000000000' || id === '0' || id === '') return true;
+
+  return false;
+}
+```
+
+**Why both checks:**
+- NEW files: Solution rows have Code="0" (or "00", "000")
+- OLD files: Solution rows have ID="000000000" with Code="005", "006", etc.
+- Supports both formats for seamless transition
+
+**Updated:**
+- `lib/excel-utils.ts` - isSolutionRow(), normalizeImportData(), getAllQuestionCols()
+- `lib/template-generator.ts` - Template now uses Code="0" for solutions
+- `types/exam.ts` - Removed Section from interfaces
+- Fixed `classifyStudentsByQuartile()` to use new solution detection
+
+### WIDE Format Support for Item Analysis (December 2025)
+**Added support for wide/pivot format CSV files with option-level permutation data**
+
+**New Format (WIDE):**
+- One row per option per master question (not one row per question)
+- Columns: `Q`, `Option`, `Master_Correct`, `version_X_Q`, `version_X_Opt`
+- Example:
+```csv
+Q,Option,Master_Correct,version_1_Q,version_1_Opt,version_2_Q,version_2_Opt
+1,A,YES,4,A,10,D
+1,B,,4,B,10,C
+```
+
+**Auto-Detection:**
+- Detects WIDE format alongside OLD and NEW formats
+- Looks for: Q/Option/Master_Correct columns + version_X_Q/version_X_Opt pairs
+- Priority: WIDE → NEW → OLD → UNKNOWN
+
+**Version Number Validation:**
+- Extracts version numbers from column names (version_1, version_2, etc.)
+- Validates sequential: (1,2,3,4) ✅, (5,6,7,8) ✅, (1,3,5) ❌
+- Clear error if non-sequential with example
+
+**Permutation Building:**
+- Handles variable options (2-5 per question)
+- Missing options stay in position: If Q has only A,B, then C→C, D→D, E→E
+- Example: Master A,B only
+  - Version 1: A→A, B→B → permutation = "ABCDE"
+  - Version 2: A→B, B→A → permutation = "BACDE"
+
+**Correct Answer Detection:**
+- Finds correct option where `Master_Correct = YES` (or Y, TRUE, 1)
+- Maps to version-specific answer using permutation
+
+**Implementation:**
+- `parseWideFormat()` in `lib/excel-utils.ts` - Converts WIDE to ItemAnalysisRow[]
+- Updated `detectCSVFormat()` to detect WIDE format
+- Updated `CSVDetectionResult` type to include 'WIDE'
+- Step 3 handles WIDE format parsing before processing
+- Full integration with existing code mapping and validation
+
+**Supported Formats (Auto-Detect):**
+1. **OLD**: code, order, order in master
+2. **NEW**: Version, Version Q#, Master Q#
+3. **WIDE**: Q, Option, Master_Correct, version_X_Q, version_X_Opt ✨ NEW!
 
 ### Position Mapping
 - Displays which question number maps to each exam version

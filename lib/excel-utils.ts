@@ -418,6 +418,10 @@ export async function readCSVFile(file: File): Promise<ItemAnalysisRow[]> {
     throw new Error("Unknown CSV format. Please map columns manually.");
   }
 
+  if (detection.format === "WIDE") {
+    return parseWideFormat(detection.data, detection.columns);
+  }
+
   return normalizeItemAnalysis(detection.data, detection.format);
 }
 
@@ -433,6 +437,29 @@ function detectCSVFormat(data: any[]): CSVDetectionResult {
   const columns = Object.keys(firstRow);
 
   debug("Detected columns:", columns);
+
+  // Check for WIDE format (Q, Option, Master_Correct, version_X_Q, version_X_Opt)
+  const hasQColumn = columns.some(col => {
+    const lower = col.toLowerCase().replace(/[_\s]/g, '');
+    return lower === 'q' || lower === 'question';
+  });
+
+  const hasOptionColumn = columns.some(col => {
+    const lower = col.toLowerCase().replace(/[_\s]/g, '');
+    return lower === 'option' || lower === 'opt';
+  });
+
+  const hasMasterCorrectColumn = columns.some(col => {
+    const lower = col.toLowerCase().replace(/[_\s]/g, '');
+    return lower === 'mastercorrect' || lower === 'correct' || lower === 'correctanswer';
+  });
+
+  const hasVersionPairs = columns.some(col => {
+    const lower = col.toLowerCase().replace(/[_\s]/g, '');
+    return /version\d+q/.test(lower) || /v\d+q/.test(lower);
+  });
+
+  const hasWideFormat = hasQColumn && hasOptionColumn && hasMasterCorrectColumn && hasVersionPairs;
 
   // Check for NEW format
   const hasNewFormat =
@@ -455,9 +482,12 @@ function detectCSVFormat(data: any[]): CSVDetectionResult {
         col.toLowerCase().includes("master")
     );
 
-  let format: "OLD" | "NEW" | "UNKNOWN";
+  let format: "OLD" | "NEW" | "WIDE" | "UNKNOWN";
 
-  if (hasNewFormat) {
+  if (hasWideFormat) {
+    format = "WIDE";
+    debug("Detected WIDE format");
+  } else if (hasNewFormat) {
     format = "NEW";
     debug("Detected NEW format");
   } else if (hasOldFormat) {
@@ -469,6 +499,177 @@ function detectCSVFormat(data: any[]): CSVDetectionResult {
   }
 
   return { format, columns, data };
+}
+
+/**
+ * Parse WIDE format CSV (one row per option per master question)
+ * Converts to ItemAnalysisRow[] format with permutation strings
+ * EXPORTED for use in Step 3
+ */
+export function parseWideFormat(data: any[], columns: string[]): ItemAnalysisRow[] {
+  // Find column names (case-insensitive)
+  const qCol = columns.find(col => {
+    const lower = col.toLowerCase().replace(/[_\s]/g, '');
+    return lower === 'q' || lower === 'question';
+  });
+
+  const optCol = columns.find(col => {
+    const lower = col.toLowerCase().replace(/[_\s]/g, '');
+    return lower === 'option' || lower === 'opt';
+  });
+
+  const correctCol = columns.find(col => {
+    const lower = col.toLowerCase().replace(/[_\s]/g, '');
+    return lower === 'mastercorrect' || lower === 'correct' || lower === 'correctanswer';
+  });
+
+  if (!qCol || !optCol || !correctCol) {
+    throw new Error('WIDE format missing required columns: Q, Option, Master_Correct');
+  }
+
+  // Extract version information from column names
+  // Pattern: version_X_Q and version_X_Opt (or v_X_Q and v_X_Opt)
+  const versionPattern = /(?:version|v)[_\s]*(\d+)[_\s]*(?:q|opt)/i;
+  const versionNumbers = new Set<number>();
+  const versionColumns: { [version: number]: { qCol: string; optCol: string } } = {};
+
+  columns.forEach(col => {
+    const match = col.match(versionPattern);
+    if (match) {
+      const versionNum = parseInt(match[1]);
+      versionNumbers.add(versionNum);
+
+      if (!versionColumns[versionNum]) {
+        versionColumns[versionNum] = { qCol: '', optCol: '' };
+      }
+
+      const lower = col.toLowerCase();
+      if (lower.includes('_q') || lower.endsWith('q')) {
+        versionColumns[versionNum].qCol = col;
+      } else if (lower.includes('opt')) {
+        versionColumns[versionNum].optCol = col;
+      }
+    }
+  });
+
+  // Sort version numbers and validate they're sequential
+  const sortedVersions = Array.from(versionNumbers).sort((a, b) => a - b);
+
+  if (sortedVersions.length === 0) {
+    throw new Error('No version columns found in WIDE format');
+  }
+
+  // Validate sequential
+  const startVersion = sortedVersions[0];
+  for (let i = 0; i < sortedVersions.length; i++) {
+    if (sortedVersions[i] !== startVersion + i) {
+      throw new Error(
+        `Version numbers must be sequential. Found: ${sortedVersions.join(', ')}. ` +
+        `Please ensure versions are numbered sequentially (e.g., 1,2,3,4 or 5,6,7,8).`
+      );
+    }
+  }
+
+  debug('Detected versions:', sortedVersions);
+
+  // Group rows by master question
+  const questionGroups: { [masterQ: number]: any[] } = {};
+  data.forEach(row => {
+    const masterQ = parseInt(String(row[qCol]));
+    if (!isNaN(masterQ)) {
+      if (!questionGroups[masterQ]) {
+        questionGroups[masterQ] = [];
+      }
+      questionGroups[masterQ].push(row);
+    }
+  });
+
+  // Process each master question
+  const result: ItemAnalysisRow[] = [];
+  const masterQuestions = Object.keys(questionGroups).map(Number).sort((a, b) => a - b);
+
+  masterQuestions.forEach(masterQ => {
+    const optionRows = questionGroups[masterQ];
+
+    // Get all options for this question (A, B, C, D, E or fewer)
+    const masterOptions: { [opt: string]: any } = {};
+    let correctOption: string | null = null;
+
+    optionRows.forEach(row => {
+      const opt = String(row[optCol]).trim().toUpperCase();
+      masterOptions[opt] = row;
+
+      // Check if this is the correct answer
+      const isCorrect = String(row[correctCol]).trim().toUpperCase();
+      if (isCorrect === 'YES' || isCorrect === 'Y' || isCorrect === 'TRUE' || isCorrect === '1') {
+        correctOption = opt;
+      }
+    });
+
+    // Process each version
+    sortedVersions.forEach(versionNum => {
+      const { qCol: vQCol, optCol: vOptCol } = versionColumns[versionNum];
+
+      if (!vQCol || !vOptCol) {
+        debug(`Warning: Missing columns for version ${versionNum}`);
+        return;
+      }
+
+      // Get question position for this version (from first option row)
+      const firstRow = optionRows[0];
+      const questionPosition = parseInt(String(firstRow[vQCol]));
+
+      if (isNaN(questionPosition)) {
+        return; // Skip if no valid position
+      }
+
+      // Build permutation string
+      // Map master option (A-E) to version option (A-E)
+      // Start with identity: A→A, B→B, C→C, D→D, E→E
+      const permutationMap: { [masterOpt: string]: string } = {
+        'A': 'A',
+        'B': 'B',
+        'C': 'C',
+        'D': 'D',
+        'E': 'E'
+      };
+
+      // Update mapping based on actual options in this question
+      Object.keys(masterOptions).forEach(masterOpt => {
+        const row = masterOptions[masterOpt];
+        const versionOpt = String(row[vOptCol]).trim().toUpperCase();
+        if (versionOpt && /^[A-E]$/.test(versionOpt)) {
+          permutationMap[masterOpt] = versionOpt;
+        }
+      });
+
+      // Build permutation string: ABCDE → e.g., "BACDE" if A↔B swapped
+      const permutation =
+        permutationMap['A'] +
+        permutationMap['B'] +
+        permutationMap['C'] +
+        permutationMap['D'] +
+        permutationMap['E'];
+
+      // Determine correct answer in this version
+      let versionCorrect: string | undefined = undefined;
+      if (correctOption) {
+        versionCorrect = permutationMap[correctOption];
+      }
+
+      // Create ItemAnalysisRow
+      result.push({
+        code: versionNum,
+        order: questionPosition,
+        order_in_master: masterQ,
+        permutation: permutation,
+        correct: versionCorrect
+      });
+    });
+  });
+
+  debug('Parsed WIDE format:', result.length, 'rows');
+  return result;
 }
 
 /**
@@ -1311,9 +1512,23 @@ export function classifyStudentsByQuartile(
   results: StudentResult[]
 ): StudentResultWithRank[] {
   // Filter out solution rows
-  const students = results.filter(
-    (r) => r.ID !== SOLUTION_ID && r.ID !== "0" && r.ID.trim() !== ""
-  );
+  // Check if Code is "0", "00", "000" OR ID is "000000000", "0", or empty
+  const students = results.filter((r) => {
+    const code = String(r.Code || '').trim();
+    const id = String(r.ID || '').trim();
+
+    // Exclude if Code is all zeros
+    if (/^0+$/.test(code)) {
+      return false;
+    }
+
+    // Exclude if ID is solution pattern or empty
+    if (id === '000000000' || id === '0' || id === '') {
+      return false;
+    }
+
+    return true;
+  });
 
   // Sort by total score descending (highest scores first)
   const sorted = [...students].sort((a, b) => b.Tot - a.Tot);
