@@ -124,6 +124,14 @@ export function AnalysisDataUploader({ onDataReady, onDataChange, helpDialog }: 
     }
   };
 
+  const handleAnswersFileClick = () => {
+    // Reset errors and mapping UI when user clicks to upload new file
+    setError(null);
+    setWarning(null);
+    setShowMappingUI(false);
+    setShowCodeMappingUI(false);
+  };
+
   const handleAnswersFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const uploadedFile = e.target.files?.[0];
     if (!uploadedFile) return;
@@ -164,6 +172,14 @@ export function AnalysisDataUploader({ onDataReady, onDataChange, helpDialog }: 
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleItemAnalysisFileClick = () => {
+    // Reset errors and mapping UI when user clicks to upload new file
+    setError(null);
+    setWarning(null);
+    setShowMappingUI(false);
+    setShowCodeMappingUI(false);
   };
 
   const handleItemAnalysisFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -386,6 +402,7 @@ export function AnalysisDataUploader({ onDataReady, onDataChange, helpDialog }: 
                   id="answers-file"
                   type="file"
                   accept=".xls,.xlsx,.csv,.txt"
+                  onClick={handleAnswersFileClick}
                   onChange={handleAnswersFileUpload}
                   disabled={loading}
                 />
@@ -405,6 +422,7 @@ export function AnalysisDataUploader({ onDataReady, onDataChange, helpDialog }: 
                   id="ia-file"
                   type="file"
                   accept=".csv"
+                  onClick={handleItemAnalysisFileClick}
                   onChange={handleItemAnalysisFileUpload}
                   disabled={loading}
                 />

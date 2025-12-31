@@ -14,21 +14,21 @@ import { HelpCircle, FileSpreadsheet, FileText, Download, CheckCircle2, AlertCir
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { generateExamTemplate } from '@/lib/template-generator';
 
-export function CrossVersionHelpDialog() {
+export function ItemAnalysisHelpDialog() {
   const [open, setOpen] = useState(false);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-          <HelpCircle className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+          <HelpCircle className="h-5 w-5 text-orange-600 dark:text-orange-400" />
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Cross-Version Analysis Help</DialogTitle>
+          <DialogTitle>Item Analysis Help</DialogTitle>
           <DialogDescription>
-            Learn how to prepare and upload your files for cross-version analysis
+            Learn how to prepare and upload your files for comprehensive psychometric analysis and cross-version comparison
           </DialogDescription>
         </DialogHeader>
 
@@ -219,10 +219,17 @@ export function CrossVersionHelpDialog() {
             <div className="space-y-4">
               <div>
                 <h3 className="font-semibold text-lg mb-2">What is Item Analysis?</h3>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm text-muted-foreground mb-2">
                   The Item Analysis CSV file maps questions from different exam versions to a master question order.
-                  This allows you to compare how students performed on the same conceptual question across different exam versions.
+                  This enables both cross-version comparison and comprehensive psychometric analysis.
                 </p>
+                <div className="bg-orange-50 dark:bg-orange-950/20 p-3 rounded-md border-l-4 border-orange-500">
+                  <p className="text-sm font-semibold text-orange-900 dark:text-orange-100 mb-2">What you get:</p>
+                  <ul className="list-disc list-inside text-sm text-orange-800 dark:text-orange-200 space-y-1">
+                    <li><strong>Cross-Version Analysis:</strong> Compare performance across exam versions (always available)</li>
+                    <li><strong>Comprehensive Psychometric Analysis:</strong> Item difficulty, discrimination, reliability (KR-20), distractor efficiency (requires QUESTIONS_MAP format with Permutation column)</li>
+                  </ul>
+                </div>
               </div>
 
               <div>

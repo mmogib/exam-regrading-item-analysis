@@ -2,13 +2,12 @@
 
 import { useState } from "react";
 import { RegradingTab } from "@/components/re-grading";
-import { UncodingTab } from "@/components/uncoding";
 import { ItemAnalysisTab } from "@/components/item-analysis";
-import { GraduationCap, RefreshCw, BarChart3, Home as HomeIcon, LineChart } from "lucide-react";
+import { GraduationCap, RefreshCw, Home as HomeIcon, LineChart } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
-type View = 'home' | 'regrading' | 'analysis' | 'item-analysis';
+type View = 'home' | 'regrading' | 'item-analysis';
 
 export default function Home() {
   const [currentView, setCurrentView] = useState<View>('home');
@@ -63,15 +62,6 @@ export default function Home() {
             </Button>
             <span className="text-muted-foreground">|</span>
             <Button
-              variant={currentView === 'analysis' ? 'default' : 'ghost'}
-              onClick={() => setCurrentView('analysis')}
-              className="gap-2"
-            >
-              <BarChart3 className="h-4 w-4" />
-              Cross-Version Analysis
-            </Button>
-            <span className="text-muted-foreground">|</span>
-            <Button
               variant={currentView === 'item-analysis' ? 'default' : 'ghost'}
               onClick={() => setCurrentView('item-analysis')}
               className="gap-2"
@@ -91,7 +81,7 @@ export default function Home() {
                 <p className="text-muted-foreground">Select the functionality you need</p>
               </div>
 
-              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-7xl mx-auto">
+              <div className="grid md:grid-cols-2 gap-6 max-w-5xl mx-auto">
                 {/* Re-grading Card */}
                 <Card className="border-2 border-green-200 dark:border-green-800 hover:shadow-xl transition-shadow cursor-pointer group">
                   <CardHeader className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/30 dark:to-emerald-950/30">
@@ -140,54 +130,6 @@ export default function Home() {
                   </CardContent>
                 </Card>
 
-                {/* Cross-Version Analysis Card */}
-                <Card className="border-2 border-purple-200 dark:border-purple-800 hover:shadow-xl transition-shadow cursor-pointer group">
-                  <CardHeader className="bg-gradient-to-br from-purple-50 to-violet-50 dark:from-purple-950/30 dark:to-violet-950/30">
-                    <div className="flex items-center gap-3 mb-2">
-                      <div className="p-3 bg-purple-100 dark:bg-purple-900/50 rounded-lg group-hover:scale-110 transition-transform">
-                        <BarChart3 className="h-8 w-8 text-purple-600 dark:text-purple-400" />
-                      </div>
-                      <CardTitle className="text-2xl text-purple-900 dark:text-purple-100">
-                        Cross-Version Analysis
-                      </CardTitle>
-                    </div>
-                    <CardDescription className="text-purple-700 dark:text-purple-300 text-base">
-                      Analyze performance across different exam versions
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="pt-6 space-y-4">
-                    <ul className="space-y-2 text-sm text-muted-foreground">
-                      <li className="flex items-start gap-2">
-                        <span className="text-purple-600 dark:text-purple-400 mt-0.5">✓</span>
-                        <span>Upload exam data and item analysis file</span>
-                      </li>
-                      <li className="flex items-start gap-2">
-                        <span className="text-purple-600 dark:text-purple-400 mt-0.5">✓</span>
-                        <span>Map questions from different versions to master order</span>
-                      </li>
-                      <li className="flex items-start gap-2">
-                        <span className="text-purple-600 dark:text-purple-400 mt-0.5">✓</span>
-                        <span>Calculate statistics per master question and version</span>
-                      </li>
-                      <li className="flex items-start gap-2">
-                        <span className="text-purple-600 dark:text-purple-400 mt-0.5">✓</span>
-                        <span>Compare performance across exam codes</span>
-                      </li>
-                      <li className="flex items-start gap-2">
-                        <span className="text-purple-600 dark:text-purple-400 mt-0.5">✓</span>
-                        <span>Export detailed analytics to Excel</span>
-                      </li>
-                    </ul>
-                    <Button
-                      onClick={() => setCurrentView('analysis')}
-                      className="w-full bg-purple-600 hover:bg-purple-700 text-white"
-                      size="lg"
-                    >
-                      Start Analysis
-                    </Button>
-                  </CardContent>
-                </Card>
-
                 {/* Item Analysis Card */}
                 <Card className="border-2 border-orange-200 dark:border-orange-800 hover:shadow-xl transition-shadow cursor-pointer group">
                   <CardHeader className="bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-950/30 dark:to-amber-950/30">
@@ -200,7 +142,7 @@ export default function Home() {
                       </CardTitle>
                     </div>
                     <CardDescription className="text-orange-700 dark:text-orange-300 text-base">
-                      Comprehensive psychometric analysis and distractor evaluation
+                      Comprehensive psychometric analysis, cross-version comparison, and distractor evaluation
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="pt-6 space-y-4">
@@ -211,19 +153,19 @@ export default function Home() {
                       </li>
                       <li className="flex items-start gap-2">
                         <span className="text-orange-600 dark:text-orange-400 mt-0.5">✓</span>
+                        <span>Item difficulty, discrimination, and reliability (KR-20)</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-orange-600 dark:text-orange-400 mt-0.5">✓</span>
+                        <span>Cross-version analysis and master question statistics</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-orange-600 dark:text-orange-400 mt-0.5">✓</span>
                         <span>Distractor analysis by performance quartiles</span>
                       </li>
                       <li className="flex items-start gap-2">
                         <span className="text-orange-600 dark:text-orange-400 mt-0.5">✓</span>
-                        <span>Identify problematic distractors and answer choices</span>
-                      </li>
-                      <li className="flex items-start gap-2">
-                        <span className="text-orange-600 dark:text-orange-400 mt-0.5">✓</span>
-                        <span>Requires QUESTIONS_MAP format with permutation data</span>
-                      </li>
-                      <li className="flex items-start gap-2">
-                        <span className="text-orange-600 dark:text-orange-400 mt-0.5">✓</span>
-                        <span>Export detailed item analysis to Excel</span>
+                        <span>Export detailed analytics to Excel</span>
                       </li>
                     </ul>
                     <Button
@@ -242,12 +184,6 @@ export default function Home() {
           {currentView === 'regrading' && (
             <div className="space-y-6">
               <RegradingTab />
-            </div>
-          )}
-
-          {currentView === 'analysis' && (
-            <div className="space-y-6">
-              <UncodingTab />
             </div>
           )}
 

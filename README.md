@@ -11,14 +11,25 @@ A modern, client-side web application for re-grading MCQ-based exams and perform
 - Automatic grading calculation (5 points per correct answer)
 - Download revised answer sheets and results
 
-### Cross-Version Analysis Module
+### Item Analysis Module
+Unified analysis combining cross-version comparison and comprehensive psychometric analysis:
+
+**Cross-Version Analysis** (always available):
 - Map student answers to master question order
-- Calculate average scores per master question
+- Calculate average scores per master question across all exam versions
 - Position mapping showing which question appears where in each version
+- Performance comparison by exam code/version
 - Support for multi-correct answers from solution rows
 - Support for alphanumeric exam codes (V1, A, 002, etc.)
-- Generate comprehensive item analysis reports
-- **Distractor analysis** showing answer choice distribution by student performance quartiles
+
+**Comprehensive Psychometric Analysis** (requires QUESTIONS_MAP format with Permutation column):
+- Item difficulty (p-value) and discrimination index (D)
+- Point-biserial correlation (r_pb)
+- Test reliability (KR-20)
+- Distractor efficiency analysis
+- Decision recommendations (KEEP/REVISE/INVESTIGATE)
+- Quartile-based distractor analysis showing answer choice distribution by student performance
+- Option-level statistics for each question
 
 ## Tech Stack
 
@@ -89,16 +100,16 @@ netlify deploy --prod --dir=out
   - `exam-data-regraded.xlsx`: Updated answer sheet with revised solutions
   - `student-grades.xlsx`: Student results with totals and percentages
 
-### Cross-Version Analysis
+### Item Analysis
 - **Input**:
   - Answers file (.xls/.xlsx): Same format as re-grading
   - `item_analysis.csv`: Maps question positions across versions (supports multiple CSV formats)
-  - `QUESTIONS_MAP.csv` (optional): Extended format with Permutation column for distractor analysis
+  - `QUESTIONS_MAP.csv` (recommended): Extended format with Permutation column for comprehensive psychometric analysis
 
 - **Output**:
   - `master-question-statistics.xlsx`: Average % correct per master question with position mapping
   - `exam-version-statistics.xlsx`: Performance statistics per exam version
-  - `distractor-analysis.xlsx`: Answer choice distribution by performance quartiles (requires QUESTIONS_MAP format)
+  - `item-analysis-comprehensive.xlsx`: Full psychometric report (requires QUESTIONS_MAP format)
 
 ## Usage
 
@@ -109,14 +120,22 @@ netlify deploy --prod --dir=out
 4. Click "Re-grade Exam"
 5. Download the revised files
 
-### Cross-Version Analysis Workflow
-1. Upload both the answers file and `item_analysis.csv` (or `QUESTIONS_MAP.csv` for distractor analysis)
+### Item Analysis Workflow
+1. Upload both the answers file and `item_analysis.csv` (or `QUESTIONS_MAP.csv` for comprehensive analysis)
 2. Set the number of questions (master order)
-3. Click "Compute"
-4. View results and download statistics files:
+3. Click "Compute Analysis"
+4. View results:
+   - **Comprehensive Psychometric Analysis** (if QUESTIONS_MAP uploaded):
+     - Test summary with KR-20 reliability
+     - Item statistics overview (sortable table)
+     - Detailed option analysis (collapsible per question)
+   - **Cross-Version Analysis** (always shown):
+     - Master question statistics with position mapping
+     - Exam version performance comparison
+5. Download statistics files:
    - `master-question-statistics.xlsx`: Per master question stats with position mapping
    - `exam-version-statistics.xlsx`: Per exam version stats
-   - `distractor-analysis.xlsx`: Answer choice distribution (if QUESTIONS_MAP format uploaded)
+   - `item-analysis-comprehensive.xlsx`: Full psychometric report (if applicable)
 
 ## Key Features
 
@@ -128,6 +147,22 @@ netlify deploy --prod --dir=out
 - ✅ **Modern UI**: Clean, professional interface with shadcn/ui
 
 ## Recent Updates
+
+### Unified Item Analysis Tab (2025)
+- **Merged functionality**: Combined Cross-Version Analysis and Comprehensive Psychometric Analysis into a single workflow
+- **Upload once, analyze twice**: Get both cross-version comparison and psychometric analysis from one set of uploads
+- **Graceful degradation**: Works with basic item analysis CSV (cross-version only) or QUESTIONS_MAP format (full analysis)
+- **Early validation**: Validates correct answers immediately when files are uploaded
+- **Error recovery**: Click upload input to reset errors and mapping UI for fresh uploads
+
+### Comprehensive Psychometric Analysis
+- Item difficulty (p), discrimination index (D), point-biserial correlation (r_pb)
+- Test reliability (KR-20)
+- Distractor efficiency percentage
+- Automatic decision recommendations (KEEP/REVISE/INVESTIGATE)
+- Quartile-based distractor analysis (T1-T4) showing answer choice distribution by student performance
+- Option-level statistics for each question with functional/weak distractor identification
+- Collapsible accordion UI for easy navigation
 
 ### Position Mapping
 - See which question number corresponds to each master question in each exam version
@@ -150,8 +185,7 @@ Download filenames are configurable via `config/downloads.json`:
 {
   "crossVersionAnalysis": {
     "masterQuestionStats": "master-question-statistics.xlsx",
-    "examVersionStats": "exam-version-statistics.xlsx",
-    "distractorAnalysis": "distractor-analysis.xlsx"
+    "examVersionStats": "exam-version-statistics.xlsx"
   },
   "reGrading": {
     "examDataRevised": "exam-data-regraded.xlsx",
@@ -164,36 +198,31 @@ Download filenames are configurable via `config/downloads.json`:
 ```
 Simply edit and rebuild - no code changes needed!
 
-### Distractor Analysis
-- Identifies which answer choices students select based on their performance level
-- Helps pinpoint confusing distractors that attract weak students
-- Requires QUESTIONS_MAP format with Permutation column
-- Displays results by performance quartiles (TOP 25%, SECOND 25%, THIRD 25%, BOTTOM 25%)
-- Collapsible accordion UI for easy navigation
-- Automatic validation of correct answers against solution rows
-
 ## Development
 
 ### Project Structure
 ```
 exam-grading-app/
 ├── app/
-│   ├── layout.tsx          # Root layout with fonts
-│   ├── page.tsx            # Main page with tabs
-│   └── globals.css         # Global styles
+│   ├── layout.tsx                    # Root layout with fonts
+│   ├── page.tsx                      # Main page with tabs
+│   └── globals.css                   # Global styles
 ├── components/
-│   ├── ui/                 # shadcn/ui components
-│   ├── re-grading.tsx      # Re-grading module
-│   └── uncoding.tsx        # Cross-version analysis module
+│   ├── ui/                           # shadcn/ui components
+│   ├── re-grading.tsx                # Re-grading module
+│   ├── item-analysis.tsx             # Item analysis module (unified)
+│   ├── item-analysis-help-dialog.tsx # Help dialog for item analysis
+│   └── shared/
+│       └── analysis-data-uploader.tsx # Shared file uploader
 ├── config/
-│   ├── downloads.json      # Download filename configuration
-│   └── downloads.ts        # Type-safe config loader
+│   ├── downloads.json                # Download filename configuration
+│   └── downloads.ts                  # Type-safe config loader
 ├── lib/
-│   ├── utils.ts            # Utility functions
-│   └── excel-utils.ts      # Excel processing logic
+│   ├── utils.ts                      # Utility functions
+│   └── excel-utils.ts                # Excel processing logic
 ├── types/
-│   └── exam.ts             # TypeScript types
-└── public/                 # Static assets
+│   └── exam.ts                       # TypeScript types
+└── public/                           # Static assets
 ```
 
 ### Adding New Features
