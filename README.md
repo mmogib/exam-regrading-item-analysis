@@ -1,41 +1,72 @@
 # KFUPM Exam Grading Tool
 
-A modern, client-side web application for re-grading MCQ-based exams and performing item analysis. Built for the Department of Mathematics at King Fahd University of Petroleum & Minerals (KFUPM).
+A modern, client-side web application for re-grading MCQ-based exams and performing comprehensive item analysis. Built for the Department of Mathematics at King Fahd University of Petroleum & Minerals (KFUPM).
 
 ## Features
 
-### Re-grading Module
-- Upload exam answer sheets (Excel format)
-- Configure correct answers for each question version
-- Support for multiple correct answers per question
-- Automatic grading calculation (5 points per correct answer)
-- Download revised answer sheets and results
+### Wizard-Based Workflow
+Four-step guided process for exam grading and analysis:
 
-### Item Analysis Module
-Unified analysis combining cross-version comparison and comprehensive psychometric analysis:
+**Step 1: Upload Student Data** (Required)
+- Upload exam answer sheets (Excel or CSV format)
+- Auto-detect number of questions
+- Display summary: students, questions, exam versions
+- Data persists across page refreshes (localStorage)
+
+**Step 2: Re-grading** (Optional)
+- Review and modify correct answers for each exam version
+- Support for multiple correct answers per question (e.g., A, C, D)
+- Visual warnings for questions missing correct answers (yellow highlight)
+- Configurable points per question
+- Download revised answer sheets and student results
+- Choose: "Finish" (complete workflow) or "Continue to Item Analysis"
+
+**Step 3: Item Analysis Upload** (Optional)
+- Upload item analysis CSV file
+- Auto-detect CSV format (multiple formats supported)
+- Manual column mapping for custom CSV formats
+- **Code validation and mapping**:
+  - Automatically detects code mismatches (e.g., "005" vs "5")
+  - Interactive mapping interface with critical warnings
+  - Validates correct answers against solution rows
+- Detects permutation data for comprehensive analysis
+
+**Step 4: Analysis Results**
+Two types of analysis available:
 
 **Cross-Version Analysis** (always available):
-- Map student answers to master question order
-- Calculate average scores per master question across all exam versions
-- Position mapping showing which question appears where in each version
+- Master question statistics across all exam versions
+- Position mapping (shows which question appears where in each version)
 - Performance comparison by exam code/version
-- Support for multi-correct answers from solution rows
+- Support for multi-correct answers
 - Support for alphanumeric exam codes (V1, A, 002, etc.)
+- Download: `master-question-statistics.xlsx`, `exam-version-statistics.xlsx`
 
-**Comprehensive Psychometric Analysis** (requires QUESTIONS_MAP format with Permutation column):
+**Comprehensive Psychometric Analysis** (requires QUESTIONS_MAP format with Permutation):
 - Item difficulty (p-value) and discrimination index (D)
 - Point-biserial correlation (r_pb)
 - Test reliability (KR-20)
 - Distractor efficiency analysis
 - Decision recommendations (KEEP/REVISE/INVESTIGATE)
-- Quartile-based distractor analysis showing answer choice distribution by student performance
+- Quartile-based distractor analysis (T1-T4)
 - Option-level statistics for each question
+- Interactive UI with sortable tables and expandable question details
+- Download: `item-analysis-comprehensive.xlsx`
+
+### User Experience
+- ✅ **Progress tracking**: Visual stepper showing current step and completion status
+- ✅ **Flexible navigation**: Back, Next, Skip, Finish buttons as appropriate
+- ✅ **State persistence**: All data saved to browser (survives page refresh)
+- ✅ **Start Over**: Clear all data and restart (with confirmation dialog)
+- ✅ **Client-side processing**: All data stays in your browser (privacy-first)
+- ✅ **Responsive design**: Works on desktop and mobile devices
 
 ## Tech Stack
 
 - **Framework**: Next.js 14 (React, TypeScript)
 - **Styling**: Tailwind CSS + shadcn/ui
 - **Excel Processing**: SheetJS (client-side)
+- **State Management**: React Context API + localStorage
 - **Deployment**: Netlify (static site)
 
 ## Getting Started
@@ -90,79 +121,107 @@ netlify deploy --prod --dir=out
 
 ## File Formats
 
-### Re-grading
-- **Input**: `import_test_data.xls` or `.xlsx`
+### Student Answer Data
+- **Input**: `import_test_data.xls`, `.xlsx`, `.csv`, or `.txt`
   - Required columns: `form`, `ID`, `Section`, `Code`
   - Question columns (numeric names like `1`, `2`, `3`, etc.)
   - Solution rows: `ID = 000000000`, `Section = 00`
-  
-- **Output**:
+  - Supports alphanumeric codes (V1, A, 002, etc.)
+
+- **Output** (Step 2 - Re-grading):
   - `exam-data-regraded.xlsx`: Updated answer sheet with revised solutions
   - `student-grades.xlsx`: Student results with totals and percentages
 
-### Item Analysis
-- **Input**:
-  - Answers file (.xls/.xlsx): Same format as re-grading
-  - `item_analysis.csv`: Maps question positions across versions (supports multiple CSV formats)
-  - `QUESTIONS_MAP.csv` (recommended): Extended format with Permutation column for comprehensive psychometric analysis
+### Item Analysis Data
+- **Input** (Step 3):
+  - `item_analysis.csv`: Maps question positions across versions (multiple formats supported)
+  - `QUESTIONS_MAP.csv` (recommended): Extended format with Permutation column for comprehensive analysis
+  - Auto-detection of CSV format (OLD/NEW/UNKNOWN)
+  - Manual column mapping available for custom formats
 
-- **Output**:
+- **Output** (Step 4):
   - `master-question-statistics.xlsx`: Average % correct per master question with position mapping
   - `exam-version-statistics.xlsx`: Performance statistics per exam version
   - `item-analysis-comprehensive.xlsx`: Full psychometric report (requires QUESTIONS_MAP format)
 
 ## Usage
 
-### Re-grading Workflow
-1. Upload the original `import_test_data.xls` file
-2. Set the number of questions in the exam
-3. Configure correct answers for each version (code)
-4. Click "Re-grade Exam"
-5. Download the revised files
+### Workflow 1: Re-grading Only
+1. **Step 1**: Upload student answer sheet
+2. **Step 2**: Review and modify correct answers → Click "Re-grade"
+3. Download revised answer sheet and results
+4. Click "Finish" to complete
 
-### Item Analysis Workflow
-1. Upload both the answers file and `item_analysis.csv` (or `QUESTIONS_MAP.csv` for comprehensive analysis)
-2. Set the number of questions (master order)
-3. Click "Compute Analysis"
-4. View results:
-   - **Comprehensive Psychometric Analysis** (if QUESTIONS_MAP uploaded):
-     - Test summary with KR-20 reliability
-     - Item statistics overview (sortable table)
-     - Detailed option analysis (collapsible per question)
-   - **Cross-Version Analysis** (always shown):
-     - Master question statistics with position mapping
-     - Exam version performance comparison
-5. Download statistics files:
-   - `master-question-statistics.xlsx`: Per master question stats with position mapping
-   - `exam-version-statistics.xlsx`: Per exam version stats
-   - `item-analysis-comprehensive.xlsx`: Full psychometric report (if applicable)
+### Workflow 2: Item Analysis Only
+1. **Step 1**: Upload student answer sheet
+2. **Step 2**: Click "Skip" (no re-grading needed)
+3. **Step 3**: Upload item analysis CSV
+   - System validates codes and correct answers
+   - Map codes if mismatch detected
+4. **Step 4**: Click "Compute Cross-Version Analysis" and/or "Compute Comprehensive Analysis"
+5. Download analysis reports
+
+### Workflow 3: Complete Analysis
+1. **Step 1**: Upload student answer sheet
+2. **Step 2**: Re-grade if needed → Click "Continue to Item Analysis"
+3. **Step 3**: Upload item analysis CSV
+4. **Step 4**: Compute both analyses
+5. Download all reports
+
+### Code Mapping (Step 3)
+If exam version codes don't match between files:
+- System detects mismatch (e.g., student data has "005", CSV has "5")
+- Shows interactive mapping table
+- **CRITICAL**: Incorrect mapping will produce wrong grades!
+- Select correct mapping from dropdowns
+- Click "Accept Mapping & Continue"
 
 ## Key Features
 
-- ✅ **Client-side processing**: All data stays in your browser (privacy-first)
-- ✅ **Multi-correct support**: Questions can have multiple correct answers
-- ✅ **Automatic detection**: Smart detection of question count and exam versions
-- ✅ **Export to Excel**: Download results in standard Excel format
-- ✅ **Responsive design**: Works on desktop and mobile devices
-- ✅ **Modern UI**: Clean, professional interface with shadcn/ui
+### Client-Side Processing
+- ✅ **Privacy-first**: All data stays in your browser
+- ✅ **No server required**: Works offline after initial load
+- ✅ **Fast processing**: No network delays
+- ✅ **Secure**: Data never leaves your device
+
+### Smart Validation
+- ✅ **Auto-detect question count**: Intelligently counts valid questions
+- ✅ **Code normalization**: Handles numeric and alphanumeric codes
+- ✅ **Multi-answer support**: Questions can have multiple correct answers (e.g., "ACDE")
+- ✅ **Early validation**: Catches errors before computation
+
+### Export Capabilities
+- ✅ **Excel format**: Standard .xlsx files
+- ✅ **Configurable filenames**: Edit `config/downloads.json`
+- ✅ **Multiple reports**: Separate downloads for different analyses
+- ✅ **Position mapping**: Shows question locations in each version
+
+### User Interface
+- ✅ **Clean design**: Modern, professional interface
+- ✅ **Visual feedback**: Color-coded warnings and status indicators
+- ✅ **Progress tracking**: Clear stepper showing workflow progress
+- ✅ **Responsive**: Works on desktop, tablet, and mobile
+- ✅ **Dark mode**: Automatic theme detection
 
 ## Recent Updates
 
-### Unified Item Analysis Tab (2025)
-- **Merged functionality**: Combined Cross-Version Analysis and Comprehensive Psychometric Analysis into a single workflow
-- **Upload once, analyze twice**: Get both cross-version comparison and psychometric analysis from one set of uploads
-- **Graceful degradation**: Works with basic item analysis CSV (cross-version only) or QUESTIONS_MAP format (full analysis)
-- **Early validation**: Validates correct answers immediately when files are uploaded
-- **Error recovery**: Click upload input to reset errors and mapping UI for fresh uploads
+### Wizard Workflow (December 2025)
+- **Complete redesign**: Replaced tab-based UI with 4-step wizard
+- **State persistence**: All data saved to browser localStorage
+- **Improved navigation**: Back/Next/Skip/Finish buttons with clear workflow
+- **Better UX**: Progress indicator, step completion tracking
 
-### Comprehensive Psychometric Analysis
-- Item difficulty (p), discrimination index (D), point-biserial correlation (r_pb)
-- Test reliability (KR-20)
-- Distractor efficiency percentage
-- Automatic decision recommendations (KEEP/REVISE/INVESTIGATE)
-- Quartile-based distractor analysis (T1-T4) showing answer choice distribution by student performance
-- Option-level statistics for each question with functional/weak distractor identification
-- Collapsible accordion UI for easy navigation
+### Code Validation Enhancement (December 2025)
+- **Automatic detection**: Identifies code mismatches between files
+- **Interactive mapping**: User-friendly interface for code mapping
+- **Critical warnings**: Clear alerts about mapping importance
+- **Smart validation timing**: Maps codes before validating answers
+
+### Visual Improvements (December 2025)
+- **Yellow warnings**: Empty answers highlighted in re-grading table
+- **Improved dialogs**: Professional confirmation modals (Start Over)
+- **Better layouts**: Vertical answer choice stacking for narrow columns
+- **Full analysis display**: Complete psychometric analysis UI with tables and accordions
 
 ### Position Mapping
 - See which question number corresponds to each master question in each exam version
@@ -174,11 +233,6 @@ netlify deploy --prod --dir=out
 - Supports alphanumeric codes: V1, V2, A, B, Version-A
 - Automatic detection and handling
 
-### File Re-upload
-- Modify uploaded files locally and re-upload seamlessly
-- File metadata (size, timestamp) displayed for tracking
-- No need to refresh page or restart
-
 ### Configurable Filenames
 Download filenames are configurable via `config/downloads.json`:
 ```json
@@ -187,12 +241,12 @@ Download filenames are configurable via `config/downloads.json`:
     "masterQuestionStats": "master-question-statistics.xlsx",
     "examVersionStats": "exam-version-statistics.xlsx"
   },
+  "comprehensiveItemAnalysis": {
+    "report": "item-analysis-comprehensive.xlsx"
+  },
   "reGrading": {
     "examDataRevised": "exam-data-regraded.xlsx",
     "studentResults": "student-grades.xlsx"
-  },
-  "templates": {
-    "examDataTemplate": "exam-data-template.xlsx"
   }
 }
 ```
@@ -204,25 +258,35 @@ Simply edit and rebuild - no code changes needed!
 ```
 exam-grading-app/
 ├── app/
-│   ├── layout.tsx                    # Root layout with fonts
-│   ├── page.tsx                      # Main page with tabs
-│   └── globals.css                   # Global styles
+│   ├── layout.tsx                        # Root layout with fonts
+│   ├── page.tsx                          # Main page with wizard
+│   └── globals.css                       # Global styles
 ├── components/
-│   ├── ui/                           # shadcn/ui components
-│   ├── re-grading.tsx                # Re-grading module
-│   ├── item-analysis.tsx             # Item analysis module (unified)
-│   ├── item-analysis-help-dialog.tsx # Help dialog for item analysis
-│   └── shared/
-│       └── analysis-data-uploader.tsx # Shared file uploader
+│   ├── wizard/                           # Wizard workflow components
+│   │   ├── exam-wizard.tsx              # Main wizard container
+│   │   ├── stepper.tsx                  # Progress indicator
+│   │   ├── step1-upload-student-data.tsx
+│   │   ├── step2-regrading.tsx
+│   │   ├── step3-upload-item-analysis.tsx
+│   │   ├── step4-analysis-results.tsx
+│   │   └── results/                     # Result display components
+│   │       ├── cross-version-results.tsx
+│   │       └── comprehensive-results.tsx
+│   ├── shared/                           # Reusable components
+│   │   └── file-drop-zone.tsx           # Drag-drop file upload
+│   └── ui/                               # shadcn/ui components
+├── contexts/
+│   └── wizard-context.tsx                # Wizard state management
 ├── config/
-│   ├── downloads.json                # Download filename configuration
-│   └── downloads.ts                  # Type-safe config loader
+│   ├── downloads.json                    # Download filename configuration
+│   └── downloads.ts                      # Type-safe config loader
 ├── lib/
-│   ├── utils.ts                      # Utility functions
-│   └── excel-utils.ts                # Excel processing logic
+│   ├── utils.ts                          # Utility functions
+│   ├── excel-utils.ts                    # Excel processing logic
+│   └── template-generator.ts             # Template generation
 ├── types/
-│   └── exam.ts                       # TypeScript types
-└── public/                           # Static assets
+│   └── exam.ts                           # TypeScript types
+└── public/                               # Static assets
 ```
 
 ### Adding New Features
@@ -236,9 +300,41 @@ npx shadcn-ui@latest add [component-name]
 
 3. **Update types**: Edit `types/exam.ts`
 
+4. **Add wizard steps**: Create new step component in `components/wizard/`
+
+### State Management
+The wizard uses React Context API for state management:
+- **Provider**: `contexts/wizard-context.tsx`
+- **localStorage**: Persists state with versioning (`kfupm_exam_wizard_v1`)
+- **State structure**: See `WizardState` interface in context file
+
+## Troubleshooting
+
+### File Upload Issues
+- **File not recognized**: Ensure Excel/CSV file has required columns
+- **Large files slow**: Files >1000 students may take time to process
+- **Browser freezes**: Try smaller file or newer browser
+
+### Validation Errors
+- **Code mismatch**: Use the mapping UI to match codes between files
+- **Missing answers**: Check solution rows (ID=000000000, Section=00)
+- **Wrong format**: Verify CSV has correct columns (code, order, orderInMaster)
+
+### localStorage Full
+- Browser localStorage has ~5-10 MB limit
+- Click "Start Over" to clear stored data
+- For very large datasets, process in batches
+
+## Documentation
+
+- **`CLAUDE.MD`**: Internal documentation for developers and Claude
+- **`DistractorAnalysis.MD`**: Psychometric formulas and theory
+- **`UNUSED_FILES_REPORT.md`**: Cleanup analysis from wizard refactor
+- **`DOCUMENTATION_PLAN.md`**: Future documentation roadmap
+
 ## License
 
-Developed by Dr. Nasir Abbas, Department of Mathematics, KFUPM.
+Developed by Dr. Nasir Abbas and Dr. Mohammed Alshahrani, Department of Mathematics, KFUPM.
 
 ## Support
 

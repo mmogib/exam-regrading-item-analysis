@@ -17,6 +17,10 @@
 
 # sample file
 /sample_files
+
+# references files
+/references 
+
 # misc
 .DS_Store
 *.pem
