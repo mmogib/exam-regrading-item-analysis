@@ -156,7 +156,7 @@ export function validateExamDataFormat(data: any[]): {
 
   const firstRow = data[0];
   const actualColumns = Object.keys(firstRow);
-  const requiredColumns = ["ID", "Section", "Code"];
+  const requiredColumns = ["ID", "Code"];
 
   // Check for required columns with helpful suggestions
   requiredColumns.forEach((col) => {
@@ -183,7 +183,7 @@ export function validateExamDataFormat(data: any[]): {
   // If there are missing required columns, add guidance
   if (errors.length > 0) {
     errors.push("");
-    errors.push("Expected column format: ID, Section, Code, 1, 2, 3, ...");
+    errors.push("Expected column format: ID, Code, 1, 2, 3, ...");
     errors.push(
       "Please download the template for the correct format or check your column names match exactly."
     );
