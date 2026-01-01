@@ -1,9 +1,16 @@
-'use client';
+"use client";
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { ExamRow, ItemAnalysisRow, CorrectAnswersMap } from '@/types/exam';
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  ReactNode,
+} from "react";
+import { ExamRow, ItemAnalysisRow, CorrectAnswersMap } from "@/types/exam";
+import { error as logError } from "@/lib/logger";
 
-const STORAGE_KEY = 'kfupm_exam_wizard_v1';
+const STORAGE_KEY = "kfupm_exam_wizard_v1";
 const STORAGE_VERSION = 1;
 
 export interface WizardState {
@@ -28,9 +35,20 @@ export interface WizardState {
 
 interface WizardContextType {
   state: WizardState;
-  updateStudentData: (data: ExamRow[], numQuestions: number, fileName: string) => void;
-  updateCorrectAnswers: (correctMap: CorrectAnswersMap, regraded: boolean) => void;
-  updateItemAnalysis: (data: ItemAnalysisRow[], hasPermutation: boolean, fileName: string) => void;
+  updateStudentData: (
+    data: ExamRow[],
+    numQuestions: number,
+    fileName: string
+  ) => void;
+  updateCorrectAnswers: (
+    correctMap: CorrectAnswersMap,
+    regraded: boolean
+  ) => void;
+  updateItemAnalysis: (
+    data: ItemAnalysisRow[],
+    hasPermutation: boolean,
+    fileName: string
+  ) => void;
   setCurrentStep: (step: number) => void;
   markStepComplete: (step: number) => void;
   resetWizard: () => void;
@@ -69,7 +87,7 @@ export function WizardProvider({ children }: { children: ReactNode }) {
         }
       }
     } catch (error) {
-      console.error('Failed to load wizard state from localStorage:', error);
+      logError("Failed to load wizard state from localStorage:", error);
       localStorage.removeItem(STORAGE_KEY);
     }
   }, []);
@@ -83,7 +101,7 @@ export function WizardProvider({ children }: { children: ReactNode }) {
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
     } catch (error) {
-      console.error('Failed to save wizard state to localStorage:', error);
+      logError("Failed to save wizard state to localStorage:", error);
     }
   };
 
@@ -92,7 +110,11 @@ export function WizardProvider({ children }: { children: ReactNode }) {
     saveToLocalStorage();
   }, [state]);
 
-  const updateStudentData = (data: ExamRow[], numQuestions: number, fileName: string) => {
+  const updateStudentData = (
+    data: ExamRow[],
+    numQuestions: number,
+    fileName: string
+  ) => {
     setState((prev) => ({
       ...prev,
       studentData: data,
@@ -101,7 +123,10 @@ export function WizardProvider({ children }: { children: ReactNode }) {
     }));
   };
 
-  const updateCorrectAnswers = (correctMap: CorrectAnswersMap, regraded: boolean) => {
+  const updateCorrectAnswers = (
+    correctMap: CorrectAnswersMap,
+    regraded: boolean
+  ) => {
     setState((prev) => ({
       ...prev,
       correctAnswersMap: correctMap,
@@ -109,7 +134,11 @@ export function WizardProvider({ children }: { children: ReactNode }) {
     }));
   };
 
-  const updateItemAnalysis = (data: ItemAnalysisRow[], hasPermutation: boolean, fileName: string) => {
+  const updateItemAnalysis = (
+    data: ItemAnalysisRow[],
+    hasPermutation: boolean,
+    fileName: string
+  ) => {
     setState((prev) => ({
       ...prev,
       itemAnalysisData: data,
@@ -160,7 +189,7 @@ export function WizardProvider({ children }: { children: ReactNode }) {
 export function useWizard() {
   const context = useContext(WizardContext);
   if (!context) {
-    throw new Error('useWizard must be used within WizardProvider');
+    throw new Error("useWizard must be used within WizardProvider");
   }
   return context;
 }
