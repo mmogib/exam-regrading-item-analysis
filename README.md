@@ -9,6 +9,9 @@ Four-step guided process for exam grading and analysis:
 
 **Step 1: Upload Student Data** (Required)
 - Upload exam answer sheets (Excel or CSV format)
+- **Download template** button for quick start
+- **Fuzzy column detection**: Accepts flexible column names (ID, Student ID, Code, Version, etc.)
+- **Manual column mapping** if auto-detection fails
 - Auto-detect number of questions
 - Display summary: students, questions, exam versions
 - Data persists across page refreshes (localStorage)
@@ -22,8 +25,12 @@ Four-step guided process for exam grading and analysis:
 - Choose: "Finish" (complete workflow) or "Continue to Item Analysis"
 
 **Step 3: Item Analysis Upload** (Optional)
-- Upload item analysis CSV file
-- Auto-detect CSV format (multiple formats supported)
+- **Format selection guide**: Interactive help to choose the right format
+- **Download templates**: Three formats available
+  - **Normal**: Basic question mapping (cross-version analysis only)
+  - **Question Map**: With permutation data (full psychometric analysis) - from [Shuffler Tool](https://shuffler.mshahrani.website)
+  - **Options Matrix**: WIDE format with option-level tracking - from [Shuffler Tool](https://shuffler.mshahrani.website)
+- Auto-detect CSV format (OLD/NEW/WIDE/UNKNOWN)
 - Manual column mapping for custom CSV formats
 - **Code validation and mapping**:
   - Automatically detects code mismatches (e.g., "005" vs "5")
@@ -42,12 +49,16 @@ Two types of analysis available:
 - Support for alphanumeric exam codes (V1, A, 002, etc.)
 - Download: `master-question-statistics.xlsx`, `exam-version-statistics.xlsx`
 
-**Comprehensive Psychometric Analysis** (requires QUESTIONS_MAP format with Permutation):
+**Comprehensive Psychometric Analysis** (requires Question Map or Options Matrix format):
+- **Help & Interpretation Guide**: Collapsible help section explaining all metrics
+- **Interactive tooltips**: Hover over metrics for quick definitions
 - Item difficulty (p-value) and discrimination index (D)
 - Point-biserial correlation (r_pb)
 - Test reliability (KR-20)
 - Distractor efficiency analysis
 - Decision recommendations (KEEP/REVISE/INVESTIGATE)
+  - Detailed decision criteria cards (KEEP, REVISE, INVESTIGATE)
+  - Example interpretation with explanations
 - Quartile-based distractor analysis (T1-T4)
 - Option-level statistics for each question
 - Interactive UI with sortable tables and expandable question details
@@ -123,10 +134,15 @@ netlify deploy --prod --dir=out
 
 ### Student Answer Data
 - **Input**: `import_test_data.xls`, `.xlsx`, `.csv`, or `.txt`
-  - Required columns: `form`, `ID`, `Section`, `Code`
-  - Question columns (numeric names like `1`, `2`, `3`, etc.)
-  - Solution rows: `ID = 000000000`, `Section = 00`
+  - Required columns: `ID` (student identifier), `Code` (exam version)
+    - Flexible column names supported: "Student ID", "ID", "Matric" for ID column
+    - Flexible column names supported: "Version", "Code", "Form Code" for Code column
+  - Question columns: Sequential numbers (1, 2, 3...) or Q-prefix (Q1, Q2, Q3...)
+  - **Solution rows**: `ID = "0"`, `Code = actual version` (e.g., "001", "002")
+    - NEW format: Solution identified by ID="0"
+    - OLD format (backwards compatible): ID="000000000"
   - Supports alphanumeric codes (V1, A, 002, etc.)
+  - **Download template button** in Step 1 provides correct format
 
 - **Output** (Step 2 - Re-grading):
   - `exam-data-regraded.xlsx`: Updated answer sheet with revised solutions
@@ -134,15 +150,33 @@ netlify deploy --prod --dir=out
 
 ### Item Analysis Data
 - **Input** (Step 3):
-  - `item_analysis.csv`: Maps question positions across versions (multiple formats supported)
-  - `QUESTIONS_MAP.csv` (recommended): Extended format with Permutation column for comprehensive analysis
-  - Auto-detection of CSV format (OLD/NEW/UNKNOWN)
+  Three formats supported (download templates available in Step 3):
+
+  1. **Normal Format**: Basic question mapping
+     - Columns: `Version`, `Version Q#`, `Master Q#`
+     - Provides: Cross-version analysis only
+     - Use when: No option shuffling
+
+  2. **Question Map** (Recommended): With permutation data
+     - Columns: `Version`, `Version Q#`, `Master Q#`, `Permutation`, `Correct`
+     - Provides: Full psychometric analysis + KR-20
+     - Use when: Options are shuffled
+     - Usually output from [Shuffler Tool](https://shuffler.mshahrani.website)
+
+  3. **Options Matrix** (WIDE format): Option-level tracking
+     - Columns: `Q`, `Option`, `Master_Correct`, `version_X_Q`, `version_X_Opt`
+     - Provides: Same as Question Map (auto-generates permutation)
+     - Use when: Detailed option position tracking needed
+     - Usually output from [Shuffler Tool](https://shuffler.mshahrani.website)
+
+  - Auto-detection of CSV format (OLD/NEW/WIDE/UNKNOWN)
   - Manual column mapping available for custom formats
+  - **Format selection guide** in Step 3 helps choose the right format
 
 - **Output** (Step 4):
   - `master-question-statistics.xlsx`: Average % correct per master question with position mapping
   - `exam-version-statistics.xlsx`: Performance statistics per exam version
-  - `item-analysis-comprehensive.xlsx`: Full psychometric report (requires QUESTIONS_MAP format)
+  - `item-analysis-comprehensive.xlsx`: Full psychometric report (requires Question Map or Options Matrix)
 
 ## Usage
 
@@ -205,6 +239,38 @@ If exam version codes don't match between files:
 
 ## Recent Updates
 
+### January 2026 Updates
+
+**Help & Documentation:**
+- **Help & Interpretation Guide** (Step 4): Collapsible guide explaining all psychometric metrics
+  - Understanding metrics (KR-20, p_i, D_i, r_pb, DE)
+  - Decision criteria cards (KEEP, REVISE, INVESTIGATE)
+  - Example interpretation with detailed explanations
+- **Interactive tooltips**: Hover help on all metric headers
+- **Format selection guide** (Step 3): Helps users choose the right item analysis format
+  - Comparison of Normal, Question Map, and Options Matrix formats
+  - Links to Shuffler Tool for advanced formats
+  - Quick decision helper
+
+**Template System:**
+- **Dynamic template generation**: Templates always match current codebase structure
+- **Download buttons**: Available in Steps 1 and 3
+- **Four templates**: Student data (4 versions, 20 questions), Normal, Question Map, Options Matrix
+- **Zero maintenance**: No static files to update manually
+- **Configurable**: Shuffler Tool URL in config/downloads.json
+
+**WIDE Format Support:**
+- **Options Matrix format**: Full support for option-level permutation data
+- **Auto-detection**: Automatically detects WIDE format CSVs
+- **Permutation generation**: Auto-generates permutation from option mappings
+- **Bug fix**: Corrected permutation-to-correct-answer logic for rotated options
+
+**Additional Features:**
+- **Favicon**: Professional app icon for browser tabs and bookmarks
+- **Fuzzy column detection** (Step 1): Accepts flexible column names with auto-detection
+- **Manual column mapping** (Step 1): UI for custom column name mapping
+- **Updated solution format**: ID="0" (NEW) with backwards compatibility for ID="000000000" (OLD)
+
 ### Wizard Workflow (December 2025)
 - **Complete redesign**: Replaced tab-based UI with 4-step wizard
 - **State persistence**: All data saved to browser localStorage
@@ -233,20 +299,26 @@ If exam version codes don't match between files:
 - Supports alphanumeric codes: V1, V2, A, B, Version-A
 - Automatic detection and handling
 
-### Configurable Filenames
-Download filenames are configurable via `config/downloads.json`:
+### Configurable Settings
+Settings are configurable via `config/downloads.json`:
 ```json
 {
   "crossVersionAnalysis": {
     "masterQuestionStats": "master-question-statistics.xlsx",
     "examVersionStats": "exam-version-statistics.xlsx"
   },
-  "comprehensiveItemAnalysis": {
-    "report": "item-analysis-comprehensive.xlsx"
-  },
   "reGrading": {
     "examDataRevised": "exam-data-regraded.xlsx",
     "studentResults": "student-grades.xlsx"
+  },
+  "templates": {
+    "examDataTemplate": "exam-data-template.xlsx",
+    "itemAnalysisNormal": "item-analysis-normal-template.csv",
+    "itemAnalysisWithPermutation": "item-analysis-with-permutation-template.csv",
+    "itemAnalysisWide": "item-analysis-wide-template.csv"
+  },
+  "externalLinks": {
+    "shufflerTool": "https://shuffler.mshahrani.website"
   }
 }
 ```
@@ -317,8 +389,8 @@ The wizard uses React Context API for state management:
 
 ### Validation Errors
 - **Code mismatch**: Use the mapping UI to match codes between files
-- **Missing answers**: Check solution rows (ID=000000000, Section=00)
-- **Wrong format**: Verify CSV has correct columns (code, order, orderInMaster)
+- **Missing answers**: Check solution rows (ID="0" with Code=actual version)
+- **Wrong format**: Verify CSV format matches one of the three supported formats (use format selection guide in Step 3)
 
 ### localStorage Full
 - Browser localStorage has ~5-10 MB limit

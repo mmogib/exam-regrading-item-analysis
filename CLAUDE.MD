@@ -31,6 +31,9 @@ The application is a client-side only Next.js app with static export capability.
 
 1. **Step 1: Upload Student Data** (`components/wizard/step1-upload-student-data.tsx`)
    - Upload exam answer sheet (.xls/.xlsx/.csv/.txt)
+   - **Download template button** for quick start
+   - **Fuzzy column detection**: Accepts flexible column names (ID, Student ID, Code, Version, etc.)
+   - **Manual column mapping** if auto-detection fails
    - Auto-detect number of questions using `guessNumQuestions()`
    - Display summary: students, questions, exam versions
    - Validates and stores data in wizard state
@@ -43,8 +46,13 @@ The application is a client-side only Next.js app with static export capability.
    - Two exit paths: "Finish" (complete) or "Continue to Item Analysis"
 
 3. **Step 3: Item Analysis Upload** (`components/wizard/step3-upload-item-analysis.tsx`) - Optional
+   - **Format selection guide**: Collapsible help to choose the right format
+   - **Download templates**: Three formats available
+     - **Normal**: Basic question mapping (cross-version analysis only)
+     - **Question Map**: With permutation data (full psychometric analysis)
+     - **Options Matrix**: WIDE format with option-level tracking
    - Upload item analysis CSV file
-   - CSV format auto-detection (OLD/NEW/UNKNOWN)
+   - CSV format auto-detection (OLD/NEW/WIDE/UNKNOWN)
    - Manual column mapping UI for unknown formats
    - **Code mismatch detection and mapping**:
      - Compares codes from Step 1 with item analysis codes
@@ -60,6 +68,8 @@ The application is a client-side only Next.js app with static export capability.
      - Exam version statistics
      - Downloads: `master-question-statistics.xlsx`, `exam-version-statistics.xlsx`
    - **Comprehensive Psychometric Analysis** (requires permutation):
+     - **Help & Interpretation Guide**: Collapsible help section explaining all metrics
+     - **Interactive tooltips**: Hover over metrics for quick definitions
      - Full UI display with sortable tables and collapsible accordions
      - Test summary, item statistics, detailed option analysis
      - Download: `item-analysis-comprehensive.xlsx`
@@ -80,7 +90,7 @@ The application is a client-side only Next.js app with static export capability.
 
 **UI Components:**
 - `components/ui/` - shadcn/ui component library
-  - accordion, alert, alert-dialog, button, card, checkbox, input, label, table
+  - accordion, alert, alert-dialog, button, card, checkbox, input, label, table, tooltip
 
 ### Wizard State Management
 
@@ -401,6 +411,281 @@ Q,Option,Master_Correct,version_1_Q,version_1_Opt,version_2_Q,version_2_Opt
 - Zero runtime overhead (bundled at build time)
 - Used across: wizard result components, `lib/excel-utils.ts`
 
+## January 2026 Updates
+
+### WIDE Format Bug Fix (January 2026)
+**Critical fix for permutation-to-correct-answer mapping logic**
+
+**Bug discovered:**
+- In `parseWideFormat()` function at `lib/excel-utils.ts:692-696`
+- Used forward lookup `permutationMap[correctOption]` instead of reverse lookup
+- Caused incorrect answer keys when options were rotated
+
+**Example scenario:**
+- Master correct = "B"
+- permutationMap = { A: "B", B: "C", C: "A", D: "D", E: "E" }
+- Bug: `permutationMap["B"]` returned "C" (WRONG)
+- Fix: Find key where value="B", which is "A" (CORRECT)
+
+**Fix implemented:**
+```typescript
+// BUGGY CODE (before):
+let versionCorrect: string | undefined = undefined;
+if (correctOption) {
+  versionCorrect = permutationMap[correctOption]; // Forward lookup - WRONG
+}
+
+// FIXED CODE (after):
+let versionCorrect: string | undefined = undefined;
+if (correctOption) {
+  versionCorrect = Object.keys(permutationMap).find(
+    (key) => permutationMap[key] === correctOption  // Reverse lookup - CORRECT
+  );
+}
+```
+
+**Impact:** This bug only affected WIDE format files with rotated options. Now correctly generates answer keys for all option permutations.
+
+### Favicon Implementation (January 2026)
+**Professional browser icon for the application**
+
+**Implementation:**
+- Added complete favicon set to `/public/` directory
+- Configured Next.js metadata in `app/layout.tsx`
+
+**Files added:**
+- `favicon.ico` (16KB) - Main favicon
+- `favicon-16x16.png` (487 bytes) - Small icon
+- `favicon-32x32.png` (954 bytes) - Medium icon
+- `apple-touch-icon.png` (6.5KB) - Apple devices
+- `android-chrome-192x192.png` (7.2KB) - Android small
+- `android-chrome-512x512.png` (25KB) - Android large
+- `site.webmanifest` (294 bytes) - Web manifest
+
+**Metadata configuration:**
+```typescript
+export const metadata: Metadata = {
+  title: "KFUPM Exam Grading Tool",
+  description: "MCQ-Based Exam Re-grading and Item Analysis Tool - Department of Mathematics, KFUPM",
+  icons: {
+    icon: [
+      { url: "/favicon-16x16.png", sizes: "16x16", type: "image/png" },
+      { url: "/favicon-32x32.png", sizes: "32x32", type: "image/png" },
+      { url: "/favicon.ico", sizes: "any" },
+    ],
+    apple: "/apple-touch-icon.png",
+  },
+  manifest: "/site.webmanifest",
+};
+```
+
+**Result:** Professional appearance in browser tabs, bookmarks, and home screen shortcuts.
+
+### Dynamic Template Generation System (January 2026)
+**Generates templates at runtime - zero maintenance burden**
+
+**Problem solved:**
+- Static template files become outdated when code changes
+- Manual maintenance required to keep templates in sync
+
+**Solution:**
+- All templates generated dynamically from code
+- Always match current codebase structure
+- Zero maintenance - templates auto-update with code changes
+
+**Templates generated:**
+1. **Student Data Template** (`generateExamTemplate()`)
+   - 4 exam versions (001, 002, 003, 004)
+   - 20 sample questions with realistic answer patterns
+   - Solution rows: ID="0", Code=actual version (e.g., "001")
+   - Downloads as `exam-data-template.xlsx`
+
+2. **Item Analysis - Normal Format** (`generateItemAnalysisNormalTemplate()`)
+   - Basic question mapping only
+   - Columns: Version, Version Q#, Master Q#
+   - Downloads as `item-analysis-normal-template.csv`
+
+3. **Item Analysis - Question Map** (`generateItemAnalysisWithPermutationTemplate()`)
+   - With permutation data for full psychometric analysis
+   - Columns: Version, Version Q#, Master Q#, Permutation, Correct
+   - Downloads as `item-analysis-with-permutation-template.csv`
+
+4. **Item Analysis - Options Matrix** (`generateItemAnalysisWideTemplate()`)
+   - WIDE format with option-level tracking
+   - Columns: Q, Option, Master_Correct, version_X_Q, version_X_Opt
+   - Downloads as `item-analysis-wide-template.csv`
+
+**Implementation:**
+- `lib/template-generator.ts` - All template generation functions
+- Download buttons in Steps 1 and 3
+- Uses `config/downloads.json` for filenames
+
+**Key insight - Solution row format:**
+- CORRECT: `{ ID: '0', Code: '001', ... }` - ID identifies solution, Code is actual version
+- INCORRECT: `{ ID: 'Solution-001', Code: '0', ... }` - This was the initial mistake
+
+### Help & Interpretation Guide (January 2026)
+**Step 4: Comprehensive help for psychometric analysis interpretation**
+
+**Problem solved:**
+- Faculty users need to understand complex psychometric metrics
+- Metrics like KR-20, p_i, D_i, r_pb, DE are not self-explanatory
+
+**Solution:**
+- Collapsible help section (collapsed by default to avoid overwhelming UI)
+- Comprehensive guide with three sections
+
+**Guide sections:**
+1. **Understanding the Metrics**
+   - KR-20 Reliability: Test consistency measure (0-1 scale, ideal ≥0.80)
+   - p_i (Difficulty): Proportion correct (ideal 0.30-0.90)
+   - D_i (Discrimination): Difference between top/bottom quartiles (ideal ≥0.30)
+   - r_pb (Point-Biserial): Item-total correlation (ideal ≥0.20)
+   - DE (Distractor Efficiency): Non-functional distractor count (ideal 0)
+
+2. **Decision Criteria Cards**
+   - **KEEP**: All metrics in good range
+   - **REVISE**: One metric problematic
+   - **INVESTIGATE**: Multiple metrics problematic
+   - Color-coded cards with specific criteria
+
+3. **Example Interpretation**
+   - Real example question with metrics
+   - Detailed explanation of what each metric means for that question
+   - Recommended action with justification
+
+**Implementation:**
+- Component: `components/wizard/results/comprehensive-results.tsx`
+- Accordion component (shadcn/ui) for collapsible sections
+- Blue-bordered card with help icon
+- Clear, accessible language for non-statistics experts
+
+**User feedback:** "I did test it. It is nice and clean."
+
+### Interactive Tooltips (January 2026)
+**Hover help on metric headers throughout Step 4**
+
+**Feature:**
+- Quick definitions on hover over metric headers
+- Uses @radix-ui/react-tooltip for accessibility
+- Consistent help icon (small question mark) next to each metric
+
+**Tooltips added:**
+- **KR-20 Reliability**: "Test consistency measure (0-1). ≥0.90 Excellent, ≥0.80 Good, ≥0.70 Acceptable"
+- **p_i (Difficulty)**: "Proportion of students who answered correctly. 0.30-0.90 is ideal"
+- **D_i (Discrimination)**: "Ability to distinguish strong/weak students. ≥0.30 is good"
+- **r_pb (Point-Biserial)**: "Correlation with total score. ≥0.20 indicates good item quality"
+- **DE (Distractor Efficiency)**: "Count of non-functional distractors. 0 is ideal"
+
+**Implementation:**
+- Added `components/ui/tooltip.tsx` (shadcn/ui component)
+- Package: `@radix-ui/react-tooltip`
+- Wrapped metric headers with `<Tooltip>` and `<TooltipTrigger>`
+- `<TooltipContent>` contains concise definitions
+
+**Result:** Users can quickly understand metrics without leaving the page or opening the full guide.
+
+### Format Selection Guide (January 2026)
+**Step 3: Interactive guide to help users choose the right item analysis format**
+
+**Problem solved:**
+- Users confused about which item analysis format to use
+- Three different formats with different capabilities
+- Need to understand trade-offs before uploading
+
+**Solution:**
+- Collapsible "Which Format Should I Use?" guide in Step 3
+- Three numbered format cards with clear descriptions
+- Links to Shuffler Tool for advanced formats
+
+**Format cards:**
+1. **Normal Format**
+   - Use when: No option shuffling
+   - Provides: Cross-version analysis only
+   - Template download available
+
+2. **Question Map** (formerly "With Permutation")
+   - Use when: Options are shuffled
+   - Provides: Full psychometric analysis + KR-20
+   - Usually from Shuffler Tool
+   - Template download available
+
+3. **Options Matrix** (formerly "WIDE Format")
+   - Use when: Detailed option position tracking needed
+   - Provides: Same as Question Map (auto-generates permutation)
+   - Usually from Shuffler Tool
+   - Template download available
+
+**External link:**
+- Link to Shuffler Tool: `https://shuffler.mshahrani.website`
+- Configurable via `config/downloads.json` (`externalLinks.shufflerTool`)
+
+**Implementation:**
+- Accordion component for collapsibility
+- Blue-bordered card with help icon
+- Clear formatting with emoji indicators
+- Download template buttons for each format
+- Quick decision helper at bottom
+
+**User feedback:** Corrected naming from "With Permutation" → "Question Map" and "WIDE Format" → "Options Matrix"
+
+### Naming Conventions (January 2026)
+**Standardized terminology across the application**
+
+**User-specified naming:**
+- **"Question Map"** (not "With Permutation") - Item analysis format with permutation data
+- **"Options Matrix"** (not "WIDE Format") - Item analysis format with option-level tracking
+
+**Updated locations:**
+- Step 3 format selection guide
+- Download button labels
+- Template generation functions
+- README.md documentation
+
+**Rationale:**
+- "Question Map" more accurately describes the content (question mapping with permutation)
+- "Options Matrix" clearer than "WIDE Format" for users
+
+### Solution Row Format Update (January 2026)
+**Clarified correct format for solution rows in student data**
+
+**Correct format (NEW):**
+- ID = "0" (identifies row as solution)
+- Code = actual exam version (e.g., "001", "002", "003")
+- One solution row per exam version
+
+**Example:**
+```typescript
+{ ID: '0', Code: '001', 1: 'A', 2: 'B', ... }  // Solution for version 001
+{ ID: '0', Code: '002', 1: 'C', 2: 'A', ... }  // Solution for version 002
+```
+
+**Backwards compatibility (OLD):**
+- ID = "000000000" (9 zeros) or empty
+- Code = actual exam version
+- Still supported for old files
+
+**Detection logic:**
+```typescript
+isSolutionRow(row: ExamRow): boolean {
+  const code = String(row.Code || '').trim();
+  const id = String(row.ID || '').trim();
+
+  // NEW format: ID = "0", "00", "000", etc.
+  if (/^0+$/.test(id)) return true;
+
+  // OLD format: ID = "000000000", "0", or empty
+  if (id === '000000000' || id === '0' || id === '') return true;
+
+  return false;
+}
+```
+
+**Why clarification needed:**
+- Initial template had incorrect format: `{ ID: 'Solution-001', Code: '0' }`
+- User corrected: "ID for solution must be 0 remember, CODE must be a real code"
+- Updated all templates and documentation
+
 ## Key Business Logic
 
 ### Core Functions (`lib/excel-utils.ts`)
@@ -458,11 +743,42 @@ Q,Option,Master_Correct,version_1_Q,version_1_Opt,version_2_Q,version_2_Opt
 
 ## Configuration
 
-### Download Filenames
-Download filenames are configurable via `config/downloads.json`.
-Edit this file to customize output file names for all downloads.
+### Download Filenames and External Links
+All configurable settings are in `config/downloads.json` with type-safe definitions in `config/downloads.ts`.
 
-Type definitions are in `config/downloads.ts` for type safety.
+**Configurable settings:**
+1. **Download filenames** - All Excel/CSV export file names
+   - Cross-version analysis outputs
+   - Re-grading outputs
+   - Template filenames
+   - Comprehensive analysis output
+
+2. **External links** - URLs to external resources
+   - Shuffler Tool URL (used in Step 3 format selection guide)
+
+**Configuration structure:**
+```json
+{
+  "crossVersionAnalysis": {
+    "masterQuestionStats": "master-question-statistics.xlsx",
+    "examVersionStats": "exam-version-statistics.xlsx",
+    "distractorAnalysis": "distractor-analysis.xlsx"
+  },
+  "reGrading": {
+    "examDataRevised": "exam-data-regraded.xlsx",
+    "studentResults": "student-grades.xlsx"
+  },
+  "templates": {
+    "examDataTemplate": "exam-data-template.xlsx",
+    "itemAnalysisNormal": "item-analysis-normal-template.csv",
+    "itemAnalysisWithPermutation": "item-analysis-with-permutation-template.csv",
+    "itemAnalysisWide": "item-analysis-wide-template.csv"
+  },
+  "externalLinks": {
+    "shufflerTool": "https://shuffler.mshahrani.website"
+  }
+}
+```
 
 **How to change:**
 1. Edit `config/downloads.json`
@@ -557,8 +873,6 @@ Complete step
 ## Future Enhancements
 
 **Potential features to consider:**
-- Template download buttons in wizard steps (re-use `lib/template-generator.ts`)
-- Help tooltips or info buttons per step
 - Undo/redo for re-grading changes
 - Import/export wizard state (JSON)
 - Progressive Web App (PWA) support

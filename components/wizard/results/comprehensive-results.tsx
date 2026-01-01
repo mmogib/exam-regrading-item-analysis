@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Download, CheckCircle, AlertTriangle, XCircle, Info, AlertCircle } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Download, CheckCircle, AlertTriangle, XCircle, Info, AlertCircle, HelpCircle } from 'lucide-react';
 import { ComprehensiveItemAnalysisResult, ItemStatistics } from '@/types/exam';
 
 interface ComprehensiveResultsProps {
@@ -86,7 +87,133 @@ export function ComprehensiveResults({ results, onDownload }: ComprehensiveResul
   const kr20Info = kr20Status(results.testSummary.KR20);
 
   return (
-    <>
+    <TooltipProvider>
+      {/* Help & Interpretation Guide */}
+      <Card className="border-blue-200 dark:border-blue-800 mb-6">
+        <Accordion type="single" collapsible>
+          <AccordionItem value="help" className="border-0">
+            <AccordionTrigger className="px-6 py-4 hover:no-underline">
+              <div className="flex items-center gap-2">
+                <HelpCircle className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                <span className="font-semibold text-blue-900 dark:text-blue-100">
+                  Help & Interpretation Guide
+                </span>
+                <span className="text-sm text-muted-foreground ml-2">
+                  (Click to expand)
+                </span>
+              </div>
+            </AccordionTrigger>
+            <AccordionContent className="px-6 pb-4">
+              <div className="space-y-6">
+                {/* Metrics Explanation */}
+                <div>
+                  <h4 className="font-semibold text-sm mb-3">Understanding the Metrics</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                    <div className="space-y-2">
+                      <div>
+                        <span className="font-semibold">KR-20 Reliability:</span>
+                        <p className="text-muted-foreground">Measures test consistency (0-1). Higher is better.</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          ≥0.90 Excellent | ≥0.80 Good | ≥0.70 Acceptable | &lt;0.70 Poor
+                        </p>
+                      </div>
+                      <div>
+                        <span className="font-semibold">Difficulty (p_i):</span>
+                        <p className="text-muted-foreground">Proportion who answered correctly (0-1).</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Ideal: 0.30-0.80 | Higher = Easier | Lower = Harder
+                        </p>
+                      </div>
+                      <div>
+                        <span className="font-semibold">Discrimination (D_i):</span>
+                        <p className="text-muted-foreground">Difference between top 27% and bottom 27%.</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Ideal: ≥0.20 | Negative = Problem (low scorers do better)
+                        </p>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <div>
+                        <span className="font-semibold">Point-Biserial (r_pb):</span>
+                        <p className="text-muted-foreground">Correlation with total score.</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Ideal: ≥0.20 | Negative = Possible wrong answer key
+                        </p>
+                      </div>
+                      <div>
+                        <span className="font-semibold">Distractor Efficiency (DE):</span>
+                        <p className="text-muted-foreground">% of distractors selected by ≥5% of students.</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Ideal: ≥75% | Low = Weak distractors (too obvious)
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Decision Criteria */}
+                <div>
+                  <h4 className="font-semibold text-sm mb-3">Decision Criteria</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                    <div className="border rounded-lg p-3 bg-green-50 dark:bg-green-950/20">
+                      <div className="flex items-center gap-2 mb-2">
+                        <CheckCircle className="h-4 w-4 text-green-600" />
+                        <span className="font-semibold text-green-900 dark:text-green-100">KEEP</span>
+                      </div>
+                      <p className="text-xs text-green-800 dark:text-green-200">
+                        Good difficulty (0.30-0.80), good discrimination (≥0.20), and good distractor efficiency (≥75%). No changes needed.
+                      </p>
+                    </div>
+                    <div className="border rounded-lg p-3 bg-yellow-50 dark:bg-yellow-950/20">
+                      <div className="flex items-center gap-2 mb-2">
+                        <AlertTriangle className="h-4 w-4 text-yellow-600" />
+                        <span className="font-semibold text-yellow-900 dark:text-yellow-100">REVISE</span>
+                      </div>
+                      <p className="text-xs text-yellow-800 dark:text-yellow-200">
+                        Too easy/hard, weak discrimination, or poor distractors. Consider rewording or improving options.
+                      </p>
+                    </div>
+                    <div className="border rounded-lg p-3 bg-red-50 dark:bg-red-950/20">
+                      <div className="flex items-center gap-2 mb-2">
+                        <XCircle className="h-4 w-4 text-red-600" />
+                        <span className="font-semibold text-red-900 dark:text-red-100">INVESTIGATE</span>
+                      </div>
+                      <p className="text-xs text-red-800 dark:text-red-200">
+                        Negative discrimination or correlation. Likely wrong answer key or fundamentally flawed question.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Example Interpretation */}
+                <div>
+                  <h4 className="font-semibold text-sm mb-3">Example Interpretation</h4>
+                  <div className="border rounded-lg p-4 bg-muted/50">
+                    <p className="text-sm mb-2">
+                      <span className="font-semibold">Question 5:</span> p_i = 0.25, D_i = 0.15, r_pb = 0.12, DE = 50%
+                      <span className="ml-2 px-2 py-1 rounded bg-yellow-100 dark:bg-yellow-900/30 text-yellow-900 dark:text-yellow-100 text-xs font-semibold">
+                        REVISE
+                      </span>
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      <span className="font-semibold">Why revise?</span>
+                    </p>
+                    <ul className="text-xs text-muted-foreground mt-2 space-y-1 ml-4 list-disc">
+                      <li><strong>Too difficult:</strong> Only 25% answered correctly (ideal: 30-80%)</li>
+                      <li><strong>Weak discrimination:</strong> 0.15 is below the 0.20 threshold (doesn't separate high/low performers well)</li>
+                      <li><strong>Poor distractors:</strong> Only 50% are functional (ideal: ≥75%). Half the wrong answers are too obviously wrong.</li>
+                    </ul>
+                    <p className="text-xs text-muted-foreground mt-3">
+                      <strong>Suggestion:</strong> Make question easier, improve discrimination by rewording, or create more plausible distractors.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
+      </Card>
+
       {/* Test Summary */}
       <Card className="border-2 border-blue-200 dark:border-blue-800">
         <CardHeader className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30">
@@ -99,7 +226,16 @@ export function ComprehensiveResults({ results, onDownload }: ComprehensiveResul
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {/* KR-20 Reliability */}
             <div className="space-y-2">
-              <p className="text-sm text-muted-foreground">KR-20 Reliability</p>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <p className="text-sm text-muted-foreground cursor-help inline-flex items-center gap-1">
+                    KR-20 Reliability <HelpCircle className="h-3 w-3" />
+                  </p>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="max-w-xs">Test consistency measure (0-1). ≥0.90 Excellent, ≥0.80 Good, ≥0.70 Acceptable</p>
+                </TooltipContent>
+              </Tooltip>
               <div className="flex items-baseline gap-2">
                 <span className="text-3xl font-bold text-blue-600 dark:text-blue-400">
                   {results.testSummary.KR20.toFixed(3)}
@@ -125,7 +261,16 @@ export function ComprehensiveResults({ results, onDownload }: ComprehensiveResul
 
             {/* Mean Difficulty */}
             <div className="space-y-2">
-              <p className="text-sm text-muted-foreground">Mean Difficulty (p)</p>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <p className="text-sm text-muted-foreground cursor-help inline-flex items-center gap-1">
+                    Mean Difficulty (p) <HelpCircle className="h-3 w-3" />
+                  </p>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="max-w-xs">Average proportion who answered correctly. Ideal: 0.30-0.80. Higher = easier</p>
+                </TooltipContent>
+              </Tooltip>
               <div className="flex items-baseline gap-2">
                 <span className="text-3xl font-bold">
                   {results.testSummary.meanDifficulty.toFixed(3)}
@@ -135,7 +280,16 @@ export function ComprehensiveResults({ results, onDownload }: ComprehensiveResul
 
             {/* Mean Discrimination */}
             <div className="space-y-2">
-              <p className="text-sm text-muted-foreground">Mean Discrimination (D)</p>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <p className="text-sm text-muted-foreground cursor-help inline-flex items-center gap-1">
+                    Mean Discrimination (D) <HelpCircle className="h-3 w-3" />
+                  </p>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="max-w-xs">Average ability to separate high/low performers. Ideal: ≥0.20. Negative = problem</p>
+                </TooltipContent>
+              </Tooltip>
               <div className="flex items-baseline gap-2">
                 <span className="text-3xl font-bold">
                   {results.testSummary.meanDiscrimination.toFixed(3)}
@@ -282,16 +436,52 @@ export function ComprehensiveResults({ results, onDownload }: ComprehensiveResul
                     Q# {sortConfig?.key === 'questionNumber' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
                   </TableHead>
                   <TableHead className="text-right font-bold cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-700" onClick={() => handleSort('p_i')}>
-                    p (Difficulty) {sortConfig?.key === 'p_i' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="inline-flex items-center gap-1">
+                          p (Difficulty) <HelpCircle className="h-3 w-3" /> {sortConfig?.key === 'p_i' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p className="max-w-xs">Item difficulty: % who answered correctly (0.30-0.80 ideal)</p>
+                      </TooltipContent>
+                    </Tooltip>
                   </TableHead>
                   <TableHead className="text-right font-bold cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-700" onClick={() => handleSort('D_i')}>
-                    D (Discrim.) {sortConfig?.key === 'D_i' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="inline-flex items-center gap-1">
+                          D (Discrim.) <HelpCircle className="h-3 w-3" /> {sortConfig?.key === 'D_i' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p className="max-w-xs">Discrimination: Top 27% vs Bottom 27% (≥0.20 ideal)</p>
+                      </TooltipContent>
+                    </Tooltip>
                   </TableHead>
                   <TableHead className="text-right font-bold cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-700" onClick={() => handleSort('r_pb')}>
-                    r_pb {sortConfig?.key === 'r_pb' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="inline-flex items-center gap-1">
+                          r_pb <HelpCircle className="h-3 w-3" /> {sortConfig?.key === 'r_pb' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p className="max-w-xs">Point-biserial: Correlation with total score (≥0.20 ideal)</p>
+                      </TooltipContent>
+                    </Tooltip>
                   </TableHead>
                   <TableHead className="text-right font-bold cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-700" onClick={() => handleSort('DE')}>
-                    DE (%) {sortConfig?.key === 'DE' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="inline-flex items-center gap-1">
+                          DE (%) <HelpCircle className="h-3 w-3" /> {sortConfig?.key === 'DE' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p className="max-w-xs">Distractor Efficiency: % functional distractors (≥75% ideal)</p>
+                      </TooltipContent>
+                    </Tooltip>
                   </TableHead>
                   <TableHead className="font-bold cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-700" onClick={() => handleSort('decision')}>
                     Decision {sortConfig?.key === 'decision' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
@@ -464,6 +654,6 @@ export function ComprehensiveResults({ results, onDownload }: ComprehensiveResul
           </Accordion>
         </CardContent>
       </Card>
-    </>
+    </TooltipProvider>
   );
 }

@@ -9,6 +9,12 @@
     "studentResults": "student-grades.xlsx"
   },
   "templates": {
-    "examDataTemplate": "exam-data-template.xlsx"
+    "examDataTemplate": "exam-data-template.xlsx",
+    "itemAnalysisNormal": "item-analysis-normal-template.csv",
+    "itemAnalysisWithPermutation": "item-analysis-with-permutation-template.csv",
+    "itemAnalysisWide": "item-analysis-wide-template.csv"
+  },
+  "externalLinks": {
+    "shufflerTool": "https://shuffler.mshahrani.website"
   }
 }

@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { AlertCircle, CheckCircle2, FileSpreadsheet, Users, Hash } from 'lucide-react';
+import { AlertCircle, CheckCircle2, FileSpreadsheet, Users, Hash, Download } from 'lucide-react';
 import { FileDropZone } from '@/components/shared/file-drop-zone';
 import {
   readExamDataFileWithDetection,
@@ -12,6 +12,7 @@ import {
   guessNumQuestions,
   isSolutionRow
 } from '@/lib/excel-utils';
+import { generateExamTemplate } from '@/lib/template-generator';
 import { useWizard } from '@/contexts/wizard-context';
 import { ExamRow, ColumnDetectionResult } from '@/types/exam';
 import { error as logError } from '@/lib/logger';
@@ -137,6 +138,19 @@ export function Step1UploadStudentData() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
+          {/* Template Download Button */}
+          <div className="flex justify-end">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={generateExamTemplate}
+              className="gap-2"
+            >
+              <Download className="h-4 w-4" />
+              Download Template
+            </Button>
+          </div>
+
           {error && (
             <Alert variant="destructive">
               <AlertCircle className="h-4 w-4" />

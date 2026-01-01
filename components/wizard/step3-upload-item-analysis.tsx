@@ -10,12 +10,16 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import {
   AlertCircle,
   CheckCircle2,
   FileText,
   Info,
   FileSpreadsheet,
+  Download,
+  HelpCircle,
+  ExternalLink,
 } from "lucide-react";
 import { FileDropZone } from "@/components/shared/file-drop-zone";
 import {
@@ -26,6 +30,12 @@ import {
   validateCorrectAnswers,
   isSolutionRow,
 } from "@/lib/excel-utils";
+import {
+  generateItemAnalysisNormalTemplate,
+  generateItemAnalysisWithPermutationTemplate,
+  generateItemAnalysisWideTemplate,
+} from "@/lib/template-generator";
+import { DOWNLOAD_FILENAMES } from "@/config/downloads";
 import { useWizard } from "@/contexts/wizard-context";
 import {
   ItemAnalysisRow,
@@ -355,6 +365,179 @@ export function Step3UploadItemAnalysis() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
+          {/* Format Selection Guide */}
+          <Card className="border-blue-200 dark:border-blue-800">
+            <Accordion type="single" collapsible>
+              <AccordionItem value="format-guide" className="border-0">
+                <AccordionTrigger className="px-6 py-4 hover:no-underline">
+                  <div className="flex items-center gap-2">
+                    <HelpCircle className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                    <span className="font-semibold text-blue-900 dark:text-blue-100">
+                      Which Format Should I Use?
+                    </span>
+                    <span className="text-sm text-muted-foreground ml-2">
+                      (Click to expand)
+                    </span>
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent className="px-6 pb-4">
+                  <div className="space-y-4">
+                    {/* Normal Format */}
+                    <div className="border rounded-lg p-4 bg-slate-50 dark:bg-slate-900/50">
+                      <div className="flex items-start gap-3">
+                        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-sm font-bold">
+                          1
+                        </div>
+                        <div className="flex-1">
+                          <h4 className="font-semibold text-sm mb-2">Normal Format</h4>
+                          <ul className="text-sm space-y-1 text-muted-foreground">
+                            <li><strong>Use when:</strong> You only have question order mapping (no option shuffling)</li>
+                            <li><strong>Provides:</strong> Cross-version analysis only</li>
+                            <li><strong>Example:</strong> Version 1 Q1 = Master Q3</li>
+                            <li><strong>File structure:</strong> Version, Version Q#, Master Q#</li>
+                            <li className="text-green-700 dark:text-green-400">✓ Simplest | ✓ No permutation needed</li>
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Question Map Format */}
+                    <div className="border-2 border-green-300 dark:border-green-700 rounded-lg p-4 bg-green-50 dark:bg-green-900/20">
+                      <div className="flex items-start gap-3">
+                        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-green-200 dark:bg-green-700 flex items-center justify-center text-sm font-bold">
+                          2
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <h4 className="font-semibold text-sm">Question Map (With Permutation)</h4>
+                            <span className="text-xs px-2 py-0.5 rounded bg-green-600 text-white font-semibold">
+                              Recommended
+                            </span>
+                          </div>
+                          <ul className="text-sm space-y-1 text-muted-foreground">
+                            <li><strong>Use when:</strong> You have option shuffling data</li>
+                            <li><strong>Provides:</strong> Full psychometric analysis + KR-20 reliability</li>
+                            <li><strong>Example:</strong> Version 1 Q1 options = BCDEA (rotated)</li>
+                            <li><strong>File structure:</strong> Version, Version Q#, Master Q#, Permutation, Correct</li>
+                            <li className="text-green-700 dark:text-green-400">✓ Most common | ✓ Best for comprehensive analysis</li>
+                            <li className="flex items-center gap-1 text-blue-700 dark:text-blue-400 mt-2">
+                              <ExternalLink className="h-3 w-3" />
+                              <span>Usually output from the </span>
+                              <a
+                                href={DOWNLOAD_FILENAMES.externalLinks.shufflerTool}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="underline hover:no-underline font-semibold"
+                              >
+                                Shuffler Tool
+                              </a>
+                            </li>
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Options Matrix Format */}
+                    <div className="border rounded-lg p-4 bg-purple-50 dark:bg-purple-900/20">
+                      <div className="flex items-start gap-3">
+                        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-purple-200 dark:bg-purple-700 flex items-center justify-center text-sm font-bold">
+                          3
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <h4 className="font-semibold text-sm">Options Matrix (WIDE Format)</h4>
+                            <span className="text-xs px-2 py-0.5 rounded bg-purple-600 text-white font-semibold">
+                              Advanced
+                            </span>
+                          </div>
+                          <ul className="text-sm space-y-1 text-muted-foreground">
+                            <li><strong>Use when:</strong> You track each option's position individually</li>
+                            <li><strong>Provides:</strong> Same as Question Map (auto-generates permutation)</li>
+                            <li><strong>Example:</strong> Master Q1 Option A → Version 1 Q4 Option B</li>
+                            <li><strong>File structure:</strong> Q, Option, Master_Correct, version_X_Q, version_X_Opt</li>
+                            <li className="text-purple-700 dark:text-purple-400">✓ Most detailed | ✓ For complex randomization</li>
+                            <li className="flex items-center gap-1 text-blue-700 dark:text-blue-400 mt-2">
+                              <ExternalLink className="h-3 w-3" />
+                              <span>Usually output from the </span>
+                              <a
+                                href={DOWNLOAD_FILENAMES.externalLinks.shufflerTool}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="underline hover:no-underline font-semibold"
+                              >
+                                Shuffler Tool
+                              </a>
+                            </li>
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Quick Decision */}
+                    <Alert className="bg-blue-50 dark:bg-blue-950/20 border-blue-200">
+                      <Info className="h-4 w-4 text-blue-600" />
+                      <AlertTitle className="text-blue-900 dark:text-blue-100">Quick Decision</AlertTitle>
+                      <AlertDescription className="text-blue-800 dark:text-blue-200 text-sm">
+                        <strong>Not sure?</strong> If you used the Shuffler Tool, download <strong>Question Map</strong> or <strong>Options Matrix</strong>.
+                        If you manually created the exam without option shuffling, use <strong>Normal</strong> format.
+                      </AlertDescription>
+                    </Alert>
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
+          </Card>
+
+          {/* Template Download Buttons */}
+          <div className="border rounded-lg p-4 bg-muted/30">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <p className="text-sm font-semibold">Download Template Files</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Choose the format that matches your needs
+                </p>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={generateItemAnalysisNormalTemplate}
+                className="gap-2 justify-start"
+              >
+                <Download className="h-4 w-4" />
+                <div className="text-left">
+                  <div className="font-semibold">Normal</div>
+                  <div className="text-xs text-muted-foreground">Basic format</div>
+                </div>
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={generateItemAnalysisWithPermutationTemplate}
+                className="gap-2 justify-start"
+              >
+                <Download className="h-4 w-4" />
+                <div className="text-left">
+                  <div className="font-semibold">Question Map</div>
+                  <div className="text-xs text-muted-foreground">Full analysis</div>
+                </div>
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={generateItemAnalysisWideTemplate}
+                className="gap-2 justify-start"
+              >
+                <Download className="h-4 w-4" />
+                <div className="text-left">
+                  <div className="font-semibold">Options Matrix</div>
+                  <div className="text-xs text-muted-foreground">Option-level</div>
+                </div>
+              </Button>
+            </div>
+          </div>
+
           {error && (
             <Alert variant="destructive">
               <AlertCircle className="h-4 w-4" />

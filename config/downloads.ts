@@ -17,6 +17,12 @@ export interface DownloadConfig {
   };
   templates: {
     examDataTemplate: string;
+    itemAnalysisNormal: string;
+    itemAnalysisWithPermutation: string;
+    itemAnalysisWide: string;
+  };
+  externalLinks: {
+    shufflerTool: string;
   };
 }
 
