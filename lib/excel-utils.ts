@@ -27,14 +27,14 @@ import { debug, error as logError } from "./logger";
  * Fuzzy match for ID column
  */
 function fuzzyMatchID(colName: string): boolean {
-  const normalized = colName.toLowerCase().replace(/[_\s-]/g, '');
+  const normalized = colName.toLowerCase().replace(/[_\s-]/g, "");
   return (
-    normalized === 'id' ||
-    normalized === 'studentid' ||
-    normalized.includes('stdid') ||
-    normalized === 'matric' ||
-    normalized === 'matriculation' ||
-    normalized.includes('studentnumber')
+    normalized === "id" ||
+    normalized === "studentid" ||
+    normalized.includes("stdid") ||
+    normalized === "matric" ||
+    normalized === "matriculation" ||
+    normalized.includes("studentnumber")
   );
 }
 
@@ -42,13 +42,13 @@ function fuzzyMatchID(colName: string): boolean {
  * Fuzzy match for Code column
  */
 function fuzzyMatchCode(colName: string): boolean {
-  const normalized = colName.toLowerCase().replace(/[_\s-]/g, '');
+  const normalized = colName.toLowerCase().replace(/[_\s-]/g, "");
   return (
-    normalized === 'code' ||
-    normalized === 'version' ||
-    normalized.includes('examcode') ||
-    normalized.includes('formcode') ||
-    normalized.includes('examversion')
+    normalized === "code" ||
+    normalized === "version" ||
+    normalized.includes("examcode") ||
+    normalized.includes("formcode") ||
+    normalized.includes("examversion")
   );
 }
 
@@ -92,7 +92,7 @@ export function detectColumns(data: any[]): ColumnDetectionResult {
       questionColumns: [],
       allColumns: [],
       valid: false,
-      errors: ['File is empty']
+      errors: ["File is empty"],
     };
   }
 
@@ -123,8 +123,10 @@ export function detectColumns(data: any[]): ColumnDetectionResult {
     const questionNum = fuzzyMatchQuestion(col);
     if (questionNum !== null) {
       // Check if this column has any non-empty values with valid answer choices
-      const hasValidData = data.some(row => {
-        const value = String(row[col] || '').trim().toUpperCase();
+      const hasValidData = data.some((row) => {
+        const value = String(row[col] || "")
+          .trim()
+          .toUpperCase();
         return value.length > 0 && /^[A-E]+$/.test(value);
       });
 
@@ -139,24 +141,28 @@ export function detectColumns(data: any[]): ColumnDetectionResult {
 
   // Validate ID column
   if (!idColumn) {
-    errors.push('Could not detect ID column. Please map it manually.');
+    errors.push("Could not detect ID column. Please map it manually.");
   }
 
   // Validate Code column
   if (!codeColumn) {
-    errors.push('Could not detect Code column. Please map it manually.');
+    errors.push("Could not detect Code column. Please map it manually.");
   }
 
   // Validate question columns
   if (questionColumns.length === 0) {
-    errors.push('Could not detect any question columns. Please map them manually.');
+    errors.push(
+      "Could not detect any question columns. Please map them manually."
+    );
   } else {
     // Check if questions are sequential (1, 2, 3, ..., N) with no gaps
     for (let i = 0; i < questionColumns.length; i++) {
       if (questionColumns[i].number !== i + 1) {
         errors.push(
-          `Question columns are not sequential. Expected question ${i + 1}, found question ${questionColumns[i].number}. ` +
-          'Please fix your file to have sequential question numbers (1, 2, 3, ...) with no gaps, then re-upload.'
+          `Question columns are not sequential. Expected question ${
+            i + 1
+          }, found question ${questionColumns[i].number}. ` +
+            "Please fix your file to have sequential question numbers (1, 2, 3, ...) with no gaps, then re-upload."
         );
         break;
       }
@@ -169,7 +175,7 @@ export function detectColumns(data: any[]): ColumnDetectionResult {
     questionColumns,
     allColumns,
     valid: errors.length === 0,
-    errors
+    errors,
   };
 }
 
@@ -299,7 +305,11 @@ export async function readExamDataFileWithDetection(file: File): Promise<{
           const data = new Uint8Array(e.target?.result as ArrayBuffer);
           workbook = XLSX.read(data, { type: "array" });
         } else {
-          reject(new Error("Unsupported file format. Please upload .xls, .xlsx, .csv, or .txt file."));
+          reject(
+            new Error(
+              "Unsupported file format. Please upload .xls, .xlsx, .csv, or .txt file."
+            )
+          );
           return;
         }
 
@@ -339,7 +349,10 @@ export async function readExamDataFileWithDetection(file: File): Promise<{
 /**
  * Apply column mapping and normalize data
  */
-export function applyColumnMapping(rawData: any[], detection: ColumnDetectionResult): ExamRow[] {
+export function applyColumnMapping(
+  rawData: any[],
+  detection: ColumnDetectionResult
+): ExamRow[] {
   if (!detection.valid || !detection.idColumn || !detection.codeColumn) {
     throw new Error("Invalid column detection. Cannot normalize data.");
   }
@@ -347,7 +360,7 @@ export function applyColumnMapping(rawData: any[], detection: ColumnDetectionRes
   return normalizeImportData(rawData, {
     idColumn: detection.idColumn,
     codeColumn: detection.codeColumn,
-    questionColumns: detection.questionColumns
+    questionColumns: detection.questionColumns,
   });
 }
 
@@ -377,7 +390,7 @@ export function validateExamDataFormat(data: any[]): {
   const detection = detectColumns(data);
   return {
     valid: detection.valid,
-    errors: detection.errors
+    errors: detection.errors,
   };
 }
 
@@ -439,27 +452,32 @@ function detectCSVFormat(data: any[]): CSVDetectionResult {
   debug("Detected columns:", columns);
 
   // Check for WIDE format (Q, Option, Master_Correct, version_X_Q, version_X_Opt)
-  const hasQColumn = columns.some(col => {
-    const lower = col.toLowerCase().replace(/[_\s]/g, '');
-    return lower === 'q' || lower === 'question';
+  const hasQColumn = columns.some((col) => {
+    const lower = col.toLowerCase().replace(/[_\s]/g, "");
+    return lower === "q" || lower === "question";
   });
 
-  const hasOptionColumn = columns.some(col => {
-    const lower = col.toLowerCase().replace(/[_\s]/g, '');
-    return lower === 'option' || lower === 'opt';
+  const hasOptionColumn = columns.some((col) => {
+    const lower = col.toLowerCase().replace(/[_\s]/g, "");
+    return lower === "option" || lower === "opt";
   });
 
-  const hasMasterCorrectColumn = columns.some(col => {
-    const lower = col.toLowerCase().replace(/[_\s]/g, '');
-    return lower === 'mastercorrect' || lower === 'correct' || lower === 'correctanswer';
+  const hasMasterCorrectColumn = columns.some((col) => {
+    const lower = col.toLowerCase().replace(/[_\s]/g, "");
+    return (
+      lower === "mastercorrect" ||
+      lower === "correct" ||
+      lower === "correctanswer"
+    );
   });
 
-  const hasVersionPairs = columns.some(col => {
-    const lower = col.toLowerCase().replace(/[_\s]/g, '');
+  const hasVersionPairs = columns.some((col) => {
+    const lower = col.toLowerCase().replace(/[_\s]/g, "");
     return /version\d+q/.test(lower) || /v\d+q/.test(lower);
   });
 
-  const hasWideFormat = hasQColumn && hasOptionColumn && hasMasterCorrectColumn && hasVersionPairs;
+  const hasWideFormat =
+    hasQColumn && hasOptionColumn && hasMasterCorrectColumn && hasVersionPairs;
 
   // Check for NEW format
   const hasNewFormat =
@@ -506,47 +524,58 @@ function detectCSVFormat(data: any[]): CSVDetectionResult {
  * Converts to ItemAnalysisRow[] format with permutation strings
  * EXPORTED for use in Step 3
  */
-export function parseWideFormat(data: any[], columns: string[]): ItemAnalysisRow[] {
+export function parseWideFormat(
+  data: any[],
+  columns: string[]
+): ItemAnalysisRow[] {
   // Find column names (case-insensitive)
-  const qCol = columns.find(col => {
-    const lower = col.toLowerCase().replace(/[_\s]/g, '');
-    return lower === 'q' || lower === 'question';
+  const qCol = columns.find((col) => {
+    const lower = col.toLowerCase().replace(/[_\s]/g, "");
+    return lower === "q" || lower === "question";
   });
 
-  const optCol = columns.find(col => {
-    const lower = col.toLowerCase().replace(/[_\s]/g, '');
-    return lower === 'option' || lower === 'opt';
+  const optCol = columns.find((col) => {
+    const lower = col.toLowerCase().replace(/[_\s]/g, "");
+    return lower === "option" || lower === "opt";
   });
 
-  const correctCol = columns.find(col => {
-    const lower = col.toLowerCase().replace(/[_\s]/g, '');
-    return lower === 'mastercorrect' || lower === 'correct' || lower === 'correctanswer';
+  const correctCol = columns.find((col) => {
+    const lower = col.toLowerCase().replace(/[_\s]/g, "");
+    return (
+      lower === "mastercorrect" ||
+      lower === "correct" ||
+      lower === "correctanswer"
+    );
   });
 
   if (!qCol || !optCol || !correctCol) {
-    throw new Error('WIDE format missing required columns: Q, Option, Master_Correct');
+    throw new Error(
+      "WIDE format missing required columns: Q, Option, Master_Correct"
+    );
   }
 
   // Extract version information from column names
   // Pattern: version_X_Q and version_X_Opt (or v_X_Q and v_X_Opt)
   const versionPattern = /(?:version|v)[_\s]*(\d+)[_\s]*(?:q|opt)/i;
   const versionNumbers = new Set<number>();
-  const versionColumns: { [version: number]: { qCol: string; optCol: string } } = {};
+  const versionColumns: {
+    [version: number]: { qCol: string; optCol: string };
+  } = {};
 
-  columns.forEach(col => {
+  columns.forEach((col) => {
     const match = col.match(versionPattern);
     if (match) {
       const versionNum = parseInt(match[1]);
       versionNumbers.add(versionNum);
 
       if (!versionColumns[versionNum]) {
-        versionColumns[versionNum] = { qCol: '', optCol: '' };
+        versionColumns[versionNum] = { qCol: "", optCol: "" };
       }
 
       const lower = col.toLowerCase();
-      if (lower.includes('_q') || lower.endsWith('q')) {
+      if (lower.includes("_q") || lower.endsWith("q")) {
         versionColumns[versionNum].qCol = col;
-      } else if (lower.includes('opt')) {
+      } else if (lower.includes("opt")) {
         versionColumns[versionNum].optCol = col;
       }
     }
@@ -556,7 +585,7 @@ export function parseWideFormat(data: any[], columns: string[]): ItemAnalysisRow
   const sortedVersions = Array.from(versionNumbers).sort((a, b) => a - b);
 
   if (sortedVersions.length === 0) {
-    throw new Error('No version columns found in WIDE format');
+    throw new Error("No version columns found in WIDE format");
   }
 
   // Validate sequential
@@ -564,17 +593,19 @@ export function parseWideFormat(data: any[], columns: string[]): ItemAnalysisRow
   for (let i = 0; i < sortedVersions.length; i++) {
     if (sortedVersions[i] !== startVersion + i) {
       throw new Error(
-        `Version numbers must be sequential. Found: ${sortedVersions.join(', ')}. ` +
-        `Please ensure versions are numbered sequentially (e.g., 1,2,3,4 or 5,6,7,8).`
+        `Version numbers must be sequential. Found: ${sortedVersions.join(
+          ", "
+        )}. ` +
+          `Please ensure versions are numbered sequentially (e.g., 1,2,3,4 or 5,6,7,8).`
       );
     }
   }
 
-  debug('Detected versions:', sortedVersions);
+  debug("Detected versions:", sortedVersions);
 
   // Group rows by master question
   const questionGroups: { [masterQ: number]: any[] } = {};
-  data.forEach(row => {
+  data.forEach((row) => {
     const masterQ = parseInt(String(row[qCol]));
     if (!isNaN(masterQ)) {
       if (!questionGroups[masterQ]) {
@@ -586,28 +617,35 @@ export function parseWideFormat(data: any[], columns: string[]): ItemAnalysisRow
 
   // Process each master question
   const result: ItemAnalysisRow[] = [];
-  const masterQuestions = Object.keys(questionGroups).map(Number).sort((a, b) => a - b);
-
-  masterQuestions.forEach(masterQ => {
+  const masterQuestions = Object.keys(questionGroups)
+    .map(Number)
+    .sort((a, b) => a - b);
+  debug("Detected questionGroups:", questionGroups);
+  debug("Detected masterQuestions:", masterQuestions);
+  masterQuestions.forEach((masterQ) => {
     const optionRows = questionGroups[masterQ];
 
     // Get all options for this question (A, B, C, D, E or fewer)
     const masterOptions: { [opt: string]: any } = {};
     let correctOption: string | null = null;
 
-    optionRows.forEach(row => {
+    optionRows.forEach((row) => {
       const opt = String(row[optCol]).trim().toUpperCase();
       masterOptions[opt] = row;
 
       // Check if this is the correct answer
       const isCorrect = String(row[correctCol]).trim().toUpperCase();
-      if (isCorrect === 'YES' || isCorrect === 'Y' || isCorrect === 'TRUE' || isCorrect === '1') {
+      if (
+        isCorrect === "YES" ||
+        isCorrect === "Y" ||
+        isCorrect === "TRUE" ||
+        isCorrect === "1"
+      ) {
         correctOption = opt;
       }
     });
-
     // Process each version
-    sortedVersions.forEach(versionNum => {
+    sortedVersions.forEach((versionNum) => {
       const { qCol: vQCol, optCol: vOptCol } = versionColumns[versionNum];
 
       if (!vQCol || !vOptCol) {
@@ -627,34 +665,37 @@ export function parseWideFormat(data: any[], columns: string[]): ItemAnalysisRow
       // Map master option (A-E) to version option (A-E)
       // Start with identity: A→A, B→B, C→C, D→D, E→E
       const permutationMap: { [masterOpt: string]: string } = {
-        'A': 'A',
-        'B': 'B',
-        'C': 'C',
-        'D': 'D',
-        'E': 'E'
+        A: "A",
+        B: "B",
+        C: "C",
+        D: "D",
+        E: "E",
       };
 
       // Update mapping based on actual options in this question
-      Object.keys(masterOptions).forEach(masterOpt => {
+      Object.keys(masterOptions).forEach((masterOpt) => {
         const row = masterOptions[masterOpt];
         const versionOpt = String(row[vOptCol]).trim().toUpperCase();
         if (versionOpt && /^[A-E]$/.test(versionOpt)) {
-          permutationMap[masterOpt] = versionOpt;
+          permutationMap[versionOpt] = masterOpt;
         }
       });
 
       // Build permutation string: ABCDE → e.g., "BACDE" if A↔B swapped
       const permutation =
-        permutationMap['A'] +
-        permutationMap['B'] +
-        permutationMap['C'] +
-        permutationMap['D'] +
-        permutationMap['E'];
+        permutationMap["A"] +
+        permutationMap["B"] +
+        permutationMap["C"] +
+        permutationMap["D"] +
+        permutationMap["E"];
 
       // Determine correct answer in this version
       let versionCorrect: string | undefined = undefined;
       if (correctOption) {
-        versionCorrect = permutationMap[correctOption];
+        versionCorrect = Object.keys(permutationMap).find(
+          (key) => permutationMap[key] === correctOption
+        );
+        // versionCorrect = permutationMap[correctOption];
       }
 
       // Create ItemAnalysisRow
@@ -663,25 +704,36 @@ export function parseWideFormat(data: any[], columns: string[]): ItemAnalysisRow
         order: questionPosition,
         order_in_master: masterQ,
         permutation: permutation,
-        correct: versionCorrect
+        correct: versionCorrect,
       });
     });
   });
 
-  debug('Parsed WIDE format:', result.length, 'rows');
+  debug("Parsed WIDE format:", result.length, "rows");
   return result;
 }
 
 /**
  * Normalize import_test_data with column mapping
  */
-function normalizeImportData(data: any[], columnMapping?: { idColumn: string; codeColumn: string; questionColumns: { name: string; number: number }[] }): ExamRow[] {
+function normalizeImportData(
+  data: any[],
+  columnMapping?: {
+    idColumn: string;
+    codeColumn: string;
+    questionColumns: { name: string; number: number }[];
+  }
+): ExamRow[] {
   if (data.length === 0) throw new Error("Empty file");
 
   return data.map((row, idx) => {
     const normalized: ExamRow = {
-      ID: columnMapping ? String(row[columnMapping.idColumn] || "") : String(row.ID || ""),
-      Code: columnMapping ? String(row[columnMapping.codeColumn] || "") : String(row.Code || ""),
+      ID: columnMapping
+        ? String(row[columnMapping.idColumn] || "")
+        : String(row.ID || ""),
+      Code: columnMapping
+        ? String(row[columnMapping.codeColumn] || "")
+        : String(row.Code || ""),
     };
 
     // Pad IDs only if they're purely numeric
@@ -909,8 +961,8 @@ export function guessNumQuestions(data: ExamRow[]): number {
  * EXPORTED for use in components
  */
 export function isSolutionRow(row: ExamRow): boolean {
-  const code = String(row.Code || '').trim();
-  const id = String(row.ID || '').trim();
+  const code = String(row.Code || "").trim();
+  const id = String(row.ID || "").trim();
 
   // Check Code first (new format): Code = "0", "00", "000", etc.
   if (/^0+$/.test(code)) {
@@ -918,7 +970,7 @@ export function isSolutionRow(row: ExamRow): boolean {
   }
 
   // Fallback to ID check (old format): ID = "000000000", "0", or empty
-  if (id === '000000000' || id === '0' || id === '') {
+  if (id === "000000000" || id === "0" || id === "") {
     return true;
   }
 
@@ -1514,8 +1566,8 @@ export function classifyStudentsByQuartile(
   // Filter out solution rows
   // Check if Code is "0", "00", "000" OR ID is "000000000", "0", or empty
   const students = results.filter((r) => {
-    const code = String(r.Code || '').trim();
-    const id = String(r.ID || '').trim();
+    const code = String(r.Code || "").trim();
+    const id = String(r.ID || "").trim();
 
     // Exclude if Code is all zeros
     if (/^0+$/.test(code)) {
@@ -1523,7 +1575,7 @@ export function classifyStudentsByQuartile(
     }
 
     // Exclude if ID is solution pattern or empty
-    if (id === '000000000' || id === '0' || id === '') {
+    if (id === "000000000" || id === "0" || id === "") {
       return false;
     }
 
