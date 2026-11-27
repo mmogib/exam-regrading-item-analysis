@@ -426,8 +426,6 @@ Q,Option,Master_Correct,version_1_Q,version_1_Opt,version_2_Q,version_2_Opt
 ### WIDE Format Bug Fix (January 2026)
 **Critical fix for permutation-to-correct-answer mapping logic**
 
-> ⚠️ **Under investigation (November 2026).** Real Shuffler files suggest the WIDE mapping is inverted. See "Known Issues" under November 2026 Updates before relying on this section.
-
 **Bug discovered:**
 - In `parseWideFormat()` function at `lib/excel-utils.ts:692-696`
 - Used forward lookup `permutationMap[correctOption]` instead of reverse lookup
@@ -726,13 +724,10 @@ isSolutionRow(row: ExamRow): boolean {
 
 ### Known Issues (pre-existing, found while writing the tests; not yet fixed)
 
-**P1 (high): WIDE / Options Matrix permutations appear inverted.**
-- On the real Math 201 sample files, the Options Matrix and the Question Map agree on question order for all 84 (version, master Q) pairs, but the parsed permutations are exact inverses in 84/84 cases.
-- The Question Map validates against the real solution rows; the Options Matrix parse gives 50 mismatches.
-- A raw row such as `Option=A, version_1_Opt=C` matches "version option A shows master option C". `parseWideFormat()` instead keys its map by `version_X_Opt` (`lib/excel-utils.ts`, permutation-building loop).
-- The January reverse-lookup change then derives the wrong version answer letter; the old forward lookup matched the real key.
-- Effect: real Shuffler Options Matrix files are probably rejected as "Correct answer mismatch".
-- The WIDE unit tests and the Options Matrix template encode the current interpretation and must change with the fix.
+**P1: resolved, not a bug.** The current WIDE parser is correct for current Shuffler output.
+- Checked against a full Shuffler v1.9.0 export (exam `.tex`, Question Map and Options Matrix): both CSVs match the exam text in 80/80 positions, permutations and correct answers.
+- The Shuffler documents `Option` as the original letter and `[Version]_Opt` as the letter it became. `parseWideFormat()` reads it that way, and the January reverse lookup is correct.
+- Only an older sample export (`OPTIONS_MATRIX_Math 201…`) used the opposite direction. Old files are out of scope; their Question Map works.
 
 **P2 (medium): comprehensive item stats mix questions across versions.**
 - `computeComprehensiveItemAnalysis()` computes `p_i`, `D_i` and `r_pb` per *version position* (`qCols[i]`), but labels them as master question `i+1`.
@@ -741,7 +736,7 @@ isSolutionRow(row: ExamRow): boolean {
 
 **P3 (low): WIDE detection reads column names from the first data row only.**
 - SheetJS omits blank cells, so a file whose first row has an empty `Master_Correct` is detected as UNKNOWN.
-- Shuffler exports always mark option A of Q1, so they are unaffected.
+- The Shuffler flags whichever master answer was configured. When that is option A, as in the sample exports, the first row is never blank.
 - Marked `it.fails` in `tests/item-analysis-parsing.test.ts`.
 
 **Minor:** the Step 1 mapping hint says solution rows have Code = "0" or "00". The documented format is ID = "0" with Code = the real version.

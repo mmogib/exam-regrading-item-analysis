@@ -49,6 +49,8 @@ export default function Home() {
               </span>
               <span>•</span>
               <span>Department of Mathematics, KFUPM</span>
+              <span>•</span>
+              <span>v{process.env.NEXT_PUBLIC_APP_VERSION}</span>
             </div>
           </footer>
         </div>
