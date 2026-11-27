@@ -88,9 +88,12 @@ function outcome<T>(fn: () => T): { ok: T } | { error: string } {
 
 describe.skipIf(!existsSync(SAMPLE_DIR))("sample_files regression comparison (local only)", () => {
   it("manifest covers every sample file", async () => {
-    const { readdirSync } = await import("node:fs");
+    const { readdirSync, statSync } = await import("node:fs");
     const listed = new Set(Object.values(MANIFEST).flat());
-    const present = readdirSync(SAMPLE_DIR).filter((f) => !f.startsWith("__"));
+    // Only top-level files are covered; subfolders (e.g. shuffler_latest/) hold other data sets
+    const present = readdirSync(SAMPLE_DIR).filter(
+      (f) => !f.startsWith("__") && statSync(path.join(SAMPLE_DIR, f)).isFile()
+    );
     expect(present.filter((f) => !listed.has(f))).toEqual([]);
   });
 
