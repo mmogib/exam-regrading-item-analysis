@@ -130,6 +130,16 @@ interface WizardState {
 
 See `README.md` for full development guidelines.
 
+- **Stack:** Next.js 16 (Turbopack build, `output: "export"`), React 19, TypeScript 5.9, Tailwind 3, SheetJS 0.20.3 from `cdn.sheetjs.com` (not the npm registry, which stopped at a vulnerable 0.18.5).
+- **Node:** 26 LTS, pinned in `.nvmrc` and in `netlify.toml` (`NODE_VERSION`).
+- **Commands:**
+  - `npm test`: Vitest
+  - `npm run lint`: `eslint .`, flat config in `eslint.config.mjs`; `next lint` no longer exists
+  - `npm run build`: static export to `out/`
+- **Netlify:** runs `npm run lint && npm test && npm run build`.
+- **Tests:** in `tests/`, using synthetic fixtures with hand-checked expected values. `tests/samples.local.test.ts` runs only when the gitignored `sample_files/` exists, and compares against `sample_files/__baseline__/`.
+- **Browser floor:** Chrome/Edge/Firefox 111+, Safari 16.4+.
+
 ## Recent Features (2025)
 
 ### Wizard Implementation (December 2025)
@@ -416,6 +426,8 @@ Q,Option,Master_Correct,version_1_Q,version_1_Opt,version_2_Q,version_2_Opt
 ### WIDE Format Bug Fix (January 2026)
 **Critical fix for permutation-to-correct-answer mapping logic**
 
+> ⚠️ **Under investigation (November 2026).** Real Shuffler files suggest the WIDE mapping is inverted. See "Known Issues" under November 2026 Updates before relying on this section.
+
 **Bug discovered:**
 - In `parseWideFormat()` function at `lib/excel-utils.ts:692-696`
 - Used forward lookup `permutationMap[correctOption]` instead of reverse lookup
@@ -686,6 +698,54 @@ isSolutionRow(row: ExamRow): boolean {
 - User corrected: "ID for solution must be 0 remember, CODE must be a real code"
 - Updated all templates and documentation
 
+## November 2026 Updates
+
+### Dependency & Security Upgrade (v1.7.0)
+
+**Upgrades:**
+- Next.js 14.2.15 → 16.4.6
+- React 18 → 19
+- ESLint 8 → 9 (flat config)
+- SheetJS 0.18.5 (npm) → 0.20.3 (official CDN)
+- Node 26 pinned
+
+`npm audit` went from 17 vulnerabilities to 0.
+
+**Commit sequence on `new-feat`:**
+1. Test safety net (`8a7ae35`)
+2. Framework (`dd43cc1`)
+3. Lint repairs (`1557697`)
+4. SheetJS (`23894dc`)
+5. Docs and version
+
+**Behavior:** unchanged. Unit tests and the local sample comparison were identical before and after each dependency commit.
+
+**Lint notes:**
+- `contexts/wizard-context.tsx` restores saved state in a post-mount effect, by design: the static prerender has no `localStorage`. Its `react-hooks/set-state-in-effect` exception is commented.
+- `components/wizard/step2-regrading.tsx` has the same kind of commented exception for re-initialising the answer key.
+
+### Known Issues (pre-existing, found while writing the tests; not yet fixed)
+
+**P1 (high): WIDE / Options Matrix permutations appear inverted.**
+- On the real Math 201 sample files, the Options Matrix and the Question Map agree on question order for all 84 (version, master Q) pairs, but the parsed permutations are exact inverses in 84/84 cases.
+- The Question Map validates against the real solution rows; the Options Matrix parse gives 50 mismatches.
+- A raw row such as `Option=A, version_1_Opt=C` matches "version option A shows master option C". `parseWideFormat()` instead keys its map by `version_X_Opt` (`lib/excel-utils.ts`, permutation-building loop).
+- The January reverse-lookup change then derives the wrong version answer letter; the old forward lookup matched the real key.
+- Effect: real Shuffler Options Matrix files are probably rejected as "Correct answer mismatch".
+- The WIDE unit tests and the Options Matrix template encode the current interpretation and must change with the fix.
+
+**P2 (medium): comprehensive item stats mix questions across versions.**
+- `computeComprehensiveItemAnalysis()` computes `p_i`, `D_i` and `r_pb` per *version position* (`qCols[i]`), but labels them as master question `i+1`.
+- `DE` and the option statistics are computed per *master* question via the mapping.
+- With shuffled question order, the rows mix questions.
+
+**P3 (low): WIDE detection reads column names from the first data row only.**
+- SheetJS omits blank cells, so a file whose first row has an empty `Master_Correct` is detected as UNKNOWN.
+- Shuffler exports always mark option A of Q1, so they are unaffected.
+- Marked `it.fails` in `tests/item-analysis-parsing.test.ts`.
+
+**Minor:** the Step 1 mapping hint says solution rows have Code = "0" or "00". The documented format is ID = "0" with Code = the real version.
+
 ## Key Business Logic
 
 ### Core Functions (`lib/excel-utils.ts`)
@@ -841,6 +901,8 @@ Complete step
 
 ## Testing Checklist
 
+**Automated (run first):** `npm test`. Covers scoring, parsing, analyses, exports and templates, plus the local `sample_files/` comparison when that folder is present. The manual checks below cover the UI.
+
 **End-to-End Workflows:**
 - [ ] Upload student data → Re-grade → Finish
 - [ ] Upload student data → Re-grade → Item Analysis → Results
@@ -869,6 +931,7 @@ Complete step
 - Browser localStorage size limits (~5-10 MB)
 - No support for non-MCQ question types
 - Assumes 5 answer choices (A-E)
+- Requires Chrome/Edge/Firefox 111+ or Safari 16.4+ (Next.js 16 baseline)
 
 ## Future Enhancements
 

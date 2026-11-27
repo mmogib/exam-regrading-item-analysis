@@ -15,6 +15,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.7.0] - 2026-11-27
+
+Dependency and security upgrade. There are no intended changes to grading, analysis or exports: the automated tests and a comparison on real sample files give identical results before and after.
+
+### Security
+- Next.js 14.2 → 16.4. Next.js 14 is end of life and had 26 unpatched advisories.
+- SheetJS (`xlsx`) 0.18.5 from npm → 0.20.3 from the official SheetJS CDN. This fixes a prototype-pollution and a ReDoS advisory in file parsing; npm offered no fix.
+- `npm audit`: 17 vulnerabilities → 0.
+
+### Changed
+- React 18 → 19.
+- ESLint 8 → 9 with a flat config. `npm run lint` now runs `eslint .`, because `next lint` was removed in Next.js 16.
+- Node.js 26 (LTS) is pinned for local development (`.nvmrc`) and Netlify (`NODE_VERSION`).
+- **Supported browsers** are now Chrome/Edge/Firefox 111+ and Safari 16.4+, the Next.js 16 baseline. Previously they were Chrome 64+ and Safari 12+.
+- The Netlify build runs lint and tests before building.
+- Removed the unused `@radix-ui/react-dialog` and `@radix-ui/react-tabs` packages.
+
+### Added
+- Automated test suite (Vitest, `npm test`), plus an optional local comparison against `sample_files/`.
+
+### Fixed
+- Lint errors: escaped quotes in UI text, and documented the effect patterns. Nothing visible changes.
+
+## [1.6.0] - 2026-01-01
+
+### Added
+- User documentation.
+
+## [1.5.0] - 2026-01-01
+
+### Added
+- Support for the wide-format (Options Matrix) item analysis file.
+- Favicons and web manifest.
+
+### Fixed
+- Correct-answer mapping for the wide format.
+
+## [1.4.0] - 2025-12-31
+
+### Added
+- Automatic detection of column names in the student data file.
+
+## [1.3.1] - 2025-12-31
+
+### Changed
+- Documentation planning.
+
+> Entries 1.3.1–1.6.0 were backfilled from the git history on 2026-11-27.
+
 ## [1.3.0] - 2025-12-31
 
 ### Added - Major Wizard Implementation 🎉

@@ -74,16 +74,21 @@ Two types of analysis available:
 
 ## Tech Stack
 
-- **Framework**: Next.js 14 (React, TypeScript)
+- **Framework**: Next.js 16 (React 19, TypeScript), static export
 - **Styling**: Tailwind CSS + shadcn/ui
-- **Excel Processing**: SheetJS (client-side)
+- **Excel Processing**: SheetJS 0.20 (client-side, installed from the official SheetJS CDN)
 - **State Management**: React Context API + localStorage
+- **Testing / Linting**: Vitest, ESLint 9
 - **Deployment**: Netlify (static site)
+
+## Supported Browsers
+
+Chrome, Edge and Firefox 111+, Safari 16.4+ (the Next.js 16 baseline; all released in early 2023 or later).
 
 ## Getting Started
 
 ### Prerequisites
-- Node.js 18+ and npm
+- Node.js 26 (LTS) and npm. The version is pinned in `.nvmrc`; Next.js 16 itself requires Node.js 20.9 or later.
 
 ### Installation
 
@@ -113,12 +118,22 @@ npm run build
 
 This creates an optimized static export in the `out/` directory.
 
+## Testing and Linting
+
+```bash
+npm test          # run the test suite once
+npm run test:watch
+npm run lint      # ESLint (Next.js core-web-vitals rules)
+```
+
+The tests in `tests/` use synthetic data only. If a local `sample_files/` folder exists (it is gitignored, because it may hold real exam data), `tests/samples.local.test.ts` also compares results on those files against a baseline stored in `sample_files/__baseline__/`. The first run writes the baseline. After an explained, intended change, update it with `npx vitest run tests/samples.local.test.ts -u`.
+
 ## Deployment to Netlify
 
 ### Option 1: Deploy via Git
 1. Push your code to GitHub
 2. Connect your repository to Netlify
-3. Netlify will automatically build and deploy
+3. Netlify will automatically build and deploy. Per `netlify.toml`, it uses Node.js 26 and runs lint, tests and the build, so a failing check stops the deploy.
 
 ### Option 2: Manual Deploy
 1. Build the project: `npm run build`
