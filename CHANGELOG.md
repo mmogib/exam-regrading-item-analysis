@@ -13,6 +13,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Undo/redo for re-grading changes
 - Import/export wizard state (JSON)
 
+### Fixed
+- Answer keys corrected in Step 2 (Re-grading) are now used by Item Analysis (Steps 3 and 4). Previously those steps kept using the key from the uploaded file. If the key changes after an item-analysis file was loaded, that file must be uploaded again.
+- Corrected answers in Step 2 survive a page refresh.
+
+### Added
+- App version shown in the page footer.
+
 ---
 
 ## [1.7.0] - 2026-11-27

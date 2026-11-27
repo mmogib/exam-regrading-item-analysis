@@ -1106,7 +1106,7 @@ export function reviseSolutionRows(
         // Replace question columns with the correct answers from correctMap
         qCols.forEach((col, idx) => {
           const letters = correctAnswers[idx];
-          revised[col] = letters.length > 0 ? letters.sort().join("") : "";
+          revised[col] = letters.length > 0 ? [...letters].sort().join("") : "";
         });
 
         return revised;

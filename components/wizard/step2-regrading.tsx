@@ -23,7 +23,7 @@ import { DOWNLOAD_FILENAMES } from '@/config/downloads';
 import { useWizard } from '@/contexts/wizard-context';
 
 export function Step2Regrading() {
-  const { state, updateCorrectAnswers, markStepComplete } = useWizard();
+  const { state, applyRegrade, markStepComplete } = useWizard();
   const [codes, setCodes] = useState<string[]>([]);
   const [qCols, setQCols] = useState<string[]>([]);
   const [correctMap, setCorrectMap] = useState<CorrectAnswersMap>({});
@@ -31,6 +31,7 @@ export function Step2Regrading() {
   const [results, setResults] = useState<StudentResult[]>([]);
   const [revisedData, setRevisedData] = useState<any[]>([]);
   const [hasModified, setHasModified] = useState(false);
+  const [itemAnalysisCleared, setItemAnalysisCleared] = useState(false);
 
   useEffect(() => {
     if (state.studentData) {
@@ -39,8 +40,9 @@ export function Step2Regrading() {
       const detectedCodes = getSolutionCodes(state.studentData);
       const initialMap = buildCorrectAnswersMap(state.studentData, selectedQCols);
 
-      // Intentionally (re)initialises the editable answer key from the uploaded
-      // data whenever that data changes; behaviour kept as-is in the upgrade.
+      // (Re)initialises the editable answer key from the working exam data
+      // whenever it changes. After a re-grade that data holds the corrected key,
+      // so saved corrections are shown again after a page refresh.
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setQCols(selectedQCols);
       setCodes(detectedCodes);
@@ -77,8 +79,8 @@ export function Step2Regrading() {
       setResults(studentResults);
       setRevisedData(revisedImport);
 
-      // Update wizard state
-      updateCorrectAnswers(correctMap, true);
+      // The corrected key becomes the working data for Steps 3 and 4
+      setItemAnalysisCleared(applyRegrade(revisedImport, correctMap));
       markStepComplete(2);
     } catch (error) {
       logError('Error computing results:', error);
@@ -242,6 +244,15 @@ export function Step2Regrading() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {itemAnalysisCleared && (
+              <Alert className="border-yellow-200 bg-yellow-50 dark:bg-yellow-950/20">
+                <AlertTriangle className="h-4 w-4 text-yellow-600" />
+                <AlertDescription className="text-yellow-800 dark:text-yellow-200">
+                  The answer key changed, so the item analysis file you loaded earlier was removed.
+                  Please upload it again in Step 3 so it is checked against the corrected key.
+                </AlertDescription>
+              </Alert>
+            )}
             <div className="flex gap-4">
               <Button onClick={downloadRevisedData} variant="outline">
                 <Download className="mr-2 h-4 w-4" />

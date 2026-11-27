@@ -739,6 +739,8 @@ isSolutionRow(row: ExamRow): boolean {
 - The Shuffler flags whichever master answer was configured. When that is option A, as in the sample exports, the first row is never blank.
 - Marked `it.fails` in `tests/item-analysis-parsing.test.ts`.
 
+**P4 (fixed in 1.7.1):** a key corrected in Step 2 used to be ignored by Steps 3 and 4. Re-grading now makes the revised data (with the corrected key) the working exam data, via `applyRegradedKey` in `contexts/wizard-context.tsx`. If the key changes after an item-analysis file was accepted, that file is cleared and must be re-uploaded, because it was validated against the old key. Tests: `tests/regrade.test.ts`.
+
 **Minor:** the Step 1 mapping hint says solution rows have Code = "0" or "00". The documented format is ID = "0" with Code = the real version.
 
 ## Key Business Logic

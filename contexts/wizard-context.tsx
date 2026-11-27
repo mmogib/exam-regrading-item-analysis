@@ -9,6 +9,7 @@ import React, {
 } from "react";
 import { ExamRow, ItemAnalysisRow, CorrectAnswersMap } from "@/types/exam";
 import { error as logError } from "@/lib/logger";
+import { isSolutionRow } from "@/lib/excel-utils";
 
 const STORAGE_KEY = "kfupm_exam_wizard_v1";
 const STORAGE_VERSION = 1;
@@ -40,10 +41,8 @@ interface WizardContextType {
     numQuestions: number,
     fileName: string
   ) => void;
-  updateCorrectAnswers: (
-    correctMap: CorrectAnswersMap,
-    regraded: boolean
-  ) => void;
+  /** Apply a re-graded answer key; returns true if loaded item analysis was cleared. */
+  applyRegrade: (revisedData: ExamRow[], correctMap: CorrectAnswersMap) => boolean;
   updateItemAnalysis: (
     data: ItemAnalysisRow[],
     hasPermutation: boolean,
@@ -69,6 +68,40 @@ const initialState: WizardState = {
 };
 
 const WizardContext = createContext<WizardContextType | undefined>(undefined);
+
+/**
+ * State transition for Step 2 "Re-grade": the revised data (solution rows
+ * rewritten with the corrected key) becomes the working exam data, so Steps 3
+ * and 4 and later page loads use the corrected key. If the key actually changed
+ * and an item-analysis file was already accepted, that file was validated
+ * against the old key, so it is cleared and must be uploaded again.
+ */
+export function applyRegradedKey(
+  prev: WizardState,
+  revisedData: ExamRow[],
+  correctMap: CorrectAnswersMap
+): { state: WizardState; itemAnalysisCleared: boolean } {
+  const solutionRows = (data: ExamRow[] | null) =>
+    JSON.stringify((data ?? []).filter((row) => isSolutionRow(row)));
+  const keyChanged = solutionRows(prev.studentData) !== solutionRows(revisedData);
+  const clearItemAnalysis = keyChanged && prev.itemAnalysisData !== null;
+
+  return {
+    itemAnalysisCleared: clearItemAnalysis,
+    state: {
+      ...prev,
+      studentData: revisedData,
+      correctAnswersMap: correctMap,
+      hasRegraded: true,
+      ...(clearItemAnalysis && {
+        itemAnalysisData: null,
+        itemAnalysisFileName: null,
+        hasPermutation: false,
+        completedSteps: prev.completedSteps.filter((step) => step !== 3),
+      }),
+    },
+  };
+}
 
 function persistState(state: WizardState) {
   try {
@@ -129,15 +162,10 @@ export function WizardProvider({ children }: { children: ReactNode }) {
     }));
   };
 
-  const updateCorrectAnswers = (
-    correctMap: CorrectAnswersMap,
-    regraded: boolean
-  ) => {
-    setState((prev) => ({
-      ...prev,
-      correctAnswersMap: correctMap,
-      hasRegraded: regraded,
-    }));
+  const applyRegrade = (revisedData: ExamRow[], correctMap: CorrectAnswersMap) => {
+    const result = applyRegradedKey(state, revisedData, correctMap);
+    setState(result.state);
+    return result.itemAnalysisCleared;
   };
 
   const updateItemAnalysis = (
@@ -179,7 +207,7 @@ export function WizardProvider({ children }: { children: ReactNode }) {
       value={{
         state,
         updateStudentData,
-        updateCorrectAnswers,
+        applyRegrade,
         updateItemAnalysis,
         setCurrentStep,
         markStepComplete,
