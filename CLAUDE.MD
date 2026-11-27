@@ -20,6 +20,43 @@ See `README.md` for installation and setup instructions.
 - All other MD files: analysis, plans, reports, summaries, etc.
 - Examples: `UNUSED_FILES_REPORT.md`, `DOCUMENTATION_PLAN.md`, `DistractorAnalysis.MD`
 - **Important**: When creating new documentation files, place them in `/references/` unless they are meant to be `CLAUDE.MD` or `README.MD`
+- `references/channels/` holds the correspondence with an external reviewer (Codex), relayed by the user; its `README.md` has the protocol and an index. Decisions are recorded in the topic notes, not in the channel.
+
+## Current State (as of 2026-11-27)
+
+**Release**
+- **Live:** v1.8.0 at https://regrading.netlify.app (Netlify site `regrading`). The version is shown in the page footer.
+- **Tags:** `v1.7.0`, `v1.7.1`, `v1.8.0` (annotated, pushed).
+- **Branches:** `new-feat` is the single development branch and `main` is the release branch. Releases fast-forward `main` to `new-feat`, so there are no merge commits.
+
+**Release procedure**
+1. Run all gates on `new-feat`: `npx tsc --noEmit`, `npm run lint`, `npm test`, `npm run build`, and `npm audit`, which must report 0.
+2. Bump with `npm version X.Y.Z --no-git-tag-version`; move the CHANGELOG entries into a version section; commit as `X.Y.Z`.
+3. Push `new-feat`, then `git push origin new-feat:main` (fast-forward only).
+4. Wait until the live page contains `X.Y.Z` (Netlify runs lint, tests and build, about a minute).
+5. Run `git tag -a vX.Y.Z` and push the tag.
+
+**Tooling**
+- Node 26 LTS (`.nvmrc`; `NODE_VERSION` in `netlify.toml`).
+- Tests: Vitest with jsdom.
+- Dummy data: `npm run gen:dummy`; see README.
+
+**Open issues** (details under "November 2026 Updates → Known Issues")
+- P2: comprehensive item statistics are per version position, not per master question.
+- P3: WIDE detection depends on the first row.
+- P5: custom Shuffler version names in Options Matrix headers are not recognised.
+- Minor wording issues.
+- Each of P2 and P3 has an `it.fails` marker test.
+
+**Local-only data (gitignored)**
+- `sample_files/`: real exam data, plus `shuffler_latest/`, a Shuffler v1.9.0 export including the `.tex`, and `__baseline__/`, the regression baseline for `tests/samples.local.test.ts`.
+- `dummy_data/`: generated datasets.
+
+**Topic notes in `references/`**
+- `UPGRADE_PLAN.md`: the v1.7.0 upgrade.
+- `ISSUE_P1_WIDE_PERMUTATION.md`: closed, not a bug.
+- `DUMMY_DATA_GENERATOR.md`.
+- `SESSION_HANDOFF_2026-11-27.md`: summary and next steps.
 
 ## Architecture
 
@@ -494,6 +531,8 @@ export const metadata: Metadata = {
 ### Dynamic Template Generation System (January 2026)
 **Generates templates at runtime - zero maintenance burden**
 
+> **Superseded in v1.8.0.** The four templates now come from one generated dataset (`TEMPLATE_PRESET` in `lib/dummy-data.ts`; wrappers in `lib/template-generator.ts`). Each has 20 questions × 4 versions × 5 students per version, and they agree with each other; the old hand-written Options Matrix template did not. The function names and download filenames are unchanged. See "Dummy Data Generator" below.
+
 **Problem solved:**
 - Static template files become outdated when code changes
 - Manual maintenance required to keep templates in sync
@@ -722,7 +761,9 @@ isSolutionRow(row: ExamRow): boolean {
 - `contexts/wizard-context.tsx` restores saved state in a post-mount effect, by design: the static prerender has no `localStorage`. Its `react-hooks/set-state-in-effect` exception is commented.
 - `components/wizard/step2-regrading.tsx` has the same kind of commented exception for re-initialising the answer key.
 
-### Known Issues (pre-existing, found while writing the tests; not yet fixed)
+### Known Issues (status as of v1.8.0)
+
+All of these predate the upgrade and were found while writing tests or reviewing with Codex.
 
 **P1: resolved, not a bug.** The current WIDE parser is correct for current Shuffler output.
 - Checked against a full Shuffler v1.9.0 export (exam `.tex`, Question Map and Options Matrix): both CSVs match the exam text in 80/80 positions, permutations and correct answers.
@@ -741,7 +782,15 @@ isSolutionRow(row: ExamRow): boolean {
 
 **P4 (fixed in 1.7.1):** a key corrected in Step 2 used to be ignored by Steps 3 and 4. Re-grading now makes the revised data (with the corrected key) the working exam data, via `applyRegradedKey` in `contexts/wizard-context.tsx`. If the key changes after an item-analysis file was accepted, that file is cleared and must be re-uploaded, because it was validated against the old key. Tests: `tests/regrade.test.ts`.
 
-**Minor:** the Step 1 mapping hint says solution rows have Code = "0" or "00". The documented format is ID = "0" with Code = the real version.
+**P5 (low, open): custom Shuffler version names are not recognised in Options Matrix headers.**
+- The Shuffler writes `${versionName}_Q` / `${versionName}_Opt`.
+- With its default names (`version_N`) the files work. With custom names, such as `A_Q` in its own help example, the file is not detected as WIDE, and `parseWideFormat` needs numeric `version_N` / `vN` columns.
+
+**Minor (open):**
+- The Step 1 mapping hint says solution rows have Code = "0" or "00". The documented format is ID = "0" with Code = the real version.
+- Step 3's mismatch message says "QUESTIONS_MAP says …" even when an Options Matrix was uploaded.
+
+**Out of scope (user decision):** Options Matrix exports from an earlier Shuffler version that used the reverse direction. Which version changed is not recorded. Use their Question Map instead.
 
 ### Dummy Data Generator (November 2026)
 
