@@ -132,7 +132,7 @@ describe("templates round-trip through the import pipeline", () => {
     expect(filename).toBe(DOWNLOAD_FILENAMES.templates.itemAnalysisNormal);
     expect(detection.format).toBe("NEW");
     const rows = normalizeItemAnalysis(detection.data, "NEW");
-    expect(rows).toHaveLength(40);
+    expect(rows).toHaveLength(20 * 4); // questions x versions of the template preset
     expect(rows.some((r) => r.permutation)).toBe(false);
   });
 
@@ -151,12 +151,27 @@ describe("templates round-trip through the import pipeline", () => {
     expect(computeComprehensiveItemAnalysis(exam, mapped, numQ).itemStatistics).toHaveLength(numQ);
   });
 
-  it("Options Matrix template is detected as WIDE and parses", async () => {
+  it("Options Matrix template pairs with the exam template and matches the Question Map", async () => {
+    const exam = await loadExamTemplate();
     const { filename, detection } = await loadItemTemplate(generateItemAnalysisWideTemplate);
     expect(filename).toBe(DOWNLOAD_FILENAMES.templates.itemAnalysisWide);
     expect(detection.format).toBe("WIDE");
-    const rows = parseWideFormat(detection.data, detection.columns);
-    expect(rows.length).toBeGreaterThan(0);
-    expect(rows.every((r) => r.permutation && r.permutation.length === 5)).toBe(true);
+
+    const wide = mapCodesByPosition(parseWideFormat(detection.data, detection.columns), exam);
+    expect(wide).toHaveLength(20 * 4);
+    expect(validateCorrectAnswers(wide, exam)).toBeNull();
+
+    const qm = await loadItemTemplate(generateItemAnalysisWithPermutationTemplate);
+    const questionMap = mapCodesByPosition(normalizeItemAnalysis(qm.detection.data, "NEW"), exam);
+    const common = (r: ItemAnalysisRow) => `${r.code}|${r.order}|${r.order_in_master}|${r.permutation}|${r.correct}`;
+    expect(wide.map(common).sort()).toEqual(questionMap.map(common).sort());
+  });
+
+  it("every template download is identical regardless of order", async () => {
+    generateItemAnalysisWideTemplate();
+    generateExamTemplate();
+    generateItemAnalysisWideTemplate();
+    const [first, , second] = capture.downloads.map((d) => d.blob);
+    expect(await blobToText(first)).toBe(await blobToText(second));
   });
 });

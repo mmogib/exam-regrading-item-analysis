@@ -13,6 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Undo/redo for re-grading changes
 - Import/export wizard state (JSON)
 
+### Added
+- Dummy data generator (`npm run gen:dummy`). It writes one synthetic exam in every input form the app accepts, plus independently computed expected results and planted problem questions. It can also simulate students for a real Shuffler Question Map (`--from-shuffler`).
+
+### Changed
+- The four template downloads are generated from one dataset, so they now agree with each other. Previously the Options Matrix template disagreed with the exam template at 24 of 40 positions. Each template now has 20 questions × 4 versions.
+
 ---
 
 ## [1.7.1] - 2026-11-27

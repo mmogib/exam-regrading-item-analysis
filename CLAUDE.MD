@@ -743,6 +743,23 @@ isSolutionRow(row: ExamRow): boolean {
 
 **Minor:** the Step 1 mapping hint says solution rows have Code = "0" or "00". The documented format is ID = "0" with Code = the real version.
 
+### Dummy Data Generator (November 2026)
+
+- **Core:** `lib/dummy-data.ts`. Pure and browser-safe, with seeded and independent random streams.
+- It builds a master exam and its versions: question order and option permutations (version letter to master letter, as `decodePermutation` expects).
+- It simulates students with a 2PL model and plants five problems: a miskey, a too-easy question, two dead distractors, two accepted answers, and low discrimination.
+- It serialises one dataset into every Step 1 and Step 3 form (`buildBundle`).
+- `expectedResults` is an **independent oracle**: it never calls `lib/excel-utils.ts`.
+- **CLI:** `scripts/generate-dummy-data.ts`, run as `npm run gen:dummy` (tsx). Output goes to `dummy_data/` (gitignored). `--from-shuffler <Question Map>` validates the map, rebuilds the exam and simulates students only.
+- **Templates:** the four download buttons use `TEMPLATE_PRESET`, one clean dataset, so the templates agree.
+- **Tests:** `tests/dummy-data.test.ts` covers every form through the real import path, oracle agreement, planted-item flags on identity question order, a P2 `it.fails` marker, and Shuffler-mode validation.
+- **Seed check (20 seeds, N=200, K=20, V=4):** KR-20 0.70–0.78.
+  - Miskey: INVESTIGATE 19/20.
+  - Dead distractors: REVISE 20/20.
+  - Too easy: REVISE 19/20.
+  - Low discrimination: never KEEP.
+- **Design review:** channel 003; Codex changes adopted, trimmed.
+
 ## Key Business Logic
 
 ### Core Functions (`lib/excel-utils.ts`)

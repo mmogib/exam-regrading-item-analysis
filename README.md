@@ -128,6 +128,22 @@ npm run lint      # ESLint (Next.js core-web-vitals rules)
 
 The tests in `tests/` use synthetic data only. If a local `sample_files/` folder exists (it is gitignored, because it may hold real exam data), `tests/samples.local.test.ts` also compares results on those files against a baseline stored in `sample_files/__baseline__/`. The first run writes the baseline. After an explained, intended change, update it with `npx vitest run tests/samples.local.test.ts -u`.
 
+## Dummy Data for Testing and Demos
+
+```bash
+npm run gen:dummy                                   # 200 students, 20 questions, 4 versions, seed 42
+npm run gen:dummy -- --students 60 --versions 2 --seed 7
+npm run gen:dummy -- --from-shuffler path/to/EXAM_mapping.csv   # fake students for a real Shuffler exam
+npm run gen:dummy -- --help
+```
+
+This writes one synthetic exam to `dummy_data/<name>/` (gitignored), in every form the app accepts:
+- **Student data:** `.xlsx`, `.xls`, `.csv`, `.txt`, semicolon-separated, alternative headers, legacy solution rows, and a file that needs the manual column mapping.
+- **Item analysis:** Normal, OLD, Question Map, Options Matrix, and unknown headers.
+- **Expected results:** the grades before and after re-grading, plus reference statistics, so you can check the app's output.
+
+Five problem questions are planted on purpose: a wrong key, a too-easy question, dead distractors, two accepted answers, and a question with no discrimination. The item analysis should flag them. Each folder's `README.md` explains every file. The app's template downloads come from the same generator.
+
 ## Deployment to Netlify
 
 ### Option 1: Deploy via Git

@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# generated dummy datasets (npm run gen:dummy)
+/dummy_data/
