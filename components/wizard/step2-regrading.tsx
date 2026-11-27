@@ -39,6 +39,9 @@ export function Step2Regrading() {
       const detectedCodes = getSolutionCodes(state.studentData);
       const initialMap = buildCorrectAnswersMap(state.studentData, selectedQCols);
 
+      // Intentionally (re)initialises the editable answer key from the uploaded
+      // data whenever that data changes; behaviour kept as-is in the upgrade.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setQCols(selectedQCols);
       setCodes(detectedCodes);
       setCorrectMap(initialMap);
@@ -123,7 +126,7 @@ export function Step2Regrading() {
         <Info className="h-4 w-4 text-blue-600" />
         <AlertTitle className="text-blue-900 dark:text-blue-100">Re-grading (Optional)</AlertTitle>
         <AlertDescription className="text-blue-800 dark:text-blue-200">
-          Review and modify correct answers below. If you don't need to change anything, you can skip to the next step.
+          Review and modify correct answers below. If you don&apos;t need to change anything, you can skip to the next step.
         </AlertDescription>
       </Alert>
 
@@ -222,7 +225,7 @@ export function Step2Regrading() {
               <Alert className="flex-1 border-yellow-200 bg-yellow-50 dark:bg-yellow-950/20">
                 <AlertTriangle className="h-4 w-4 text-yellow-600" />
                 <AlertDescription className="text-yellow-800 dark:text-yellow-200">
-                  You've modified answers. Click "Re-grade" to apply changes.
+                  You&apos;ve modified answers. Click &quot;Re-grade&quot; to apply changes.
                 </AlertDescription>
               </Alert>
             )}

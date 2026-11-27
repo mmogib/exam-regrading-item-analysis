@@ -70,6 +70,19 @@ const initialState: WizardState = {
 
 const WizardContext = createContext<WizardContextType | undefined>(undefined);
 
+function persistState(state: WizardState) {
+  try {
+    const toSave = {
+      version: STORAGE_VERSION,
+      state,
+      timestamp: new Date().toISOString(),
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
+  } catch (error) {
+    logError("Failed to save wizard state to localStorage:", error);
+  }
+}
+
 export function WizardProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<WizardState>(initialState);
 
@@ -80,6 +93,10 @@ export function WizardProvider({ children }: { children: ReactNode }) {
       if (stored) {
         const parsed = JSON.parse(stored);
         if (parsed.version === STORAGE_VERSION) {
+          // Restoring must happen after mount: the page is statically
+          // prerendered, where localStorage does not exist, so a lazy
+          // useState initialiser would cause a hydration mismatch.
+          // eslint-disable-next-line react-hooks/set-state-in-effect
           setState(parsed.state);
         } else {
           // Version mismatch, clear old data
@@ -92,22 +109,11 @@ export function WizardProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const saveToLocalStorage = () => {
-    try {
-      const toSave = {
-        version: STORAGE_VERSION,
-        state,
-        timestamp: new Date().toISOString(),
-      };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
-    } catch (error) {
-      logError("Failed to save wizard state to localStorage:", error);
-    }
-  };
+  const saveToLocalStorage = () => persistState(state);
 
   // Auto-save to localStorage whenever state changes
   useEffect(() => {
-    saveToLocalStorage();
+    persistState(state);
   }, [state]);
 
   const updateStudentData = (

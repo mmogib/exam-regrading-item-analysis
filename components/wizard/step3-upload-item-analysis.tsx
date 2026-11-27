@@ -451,7 +451,7 @@ export function Step3UploadItemAnalysis() {
                             </span>
                           </div>
                           <ul className="text-sm space-y-1 text-muted-foreground">
-                            <li><strong>Use when:</strong> You track each option's position individually</li>
+                            <li><strong>Use when:</strong> You track each option&apos;s position individually</li>
                             <li><strong>Provides:</strong> Same as Question Map (auto-generates permutation)</li>
                             <li><strong>Example:</strong> Master Q1 Option A → Version 1 Q4 Option B</li>
                             <li><strong>File structure:</strong> Q, Option, Master_Correct, version_X_Q, version_X_Opt</li>
@@ -611,7 +611,7 @@ export function Step3UploadItemAnalysis() {
             <AlertCircle className="h-6 w-6 text-yellow-600 mt-0.5" />
             <CardTitle>Map Your CSV Columns</CardTitle>
             <CardDescription>
-              We couldn't auto-detect your CSV format. Please map your columns
+              We couldn&apos;t auto-detect your CSV format. Please map your columns
               below.
             </CardDescription>
           </CardHeader>
@@ -720,7 +720,7 @@ export function Step3UploadItemAnalysis() {
               Code Mismatch Detected
             </CardTitle>
             <CardDescription className="text-red-700 dark:text-red-300">
-              The exam version codes in your item analysis file don't match the
+              The exam version codes in your item analysis file don&apos;t match the
               codes from your student data file. Please map them below.
             </CardDescription>
           </CardHeader>

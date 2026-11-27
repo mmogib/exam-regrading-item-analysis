@@ -200,7 +200,7 @@ export function ComprehensiveResults({ results, onDownload }: ComprehensiveResul
                     </p>
                     <ul className="text-xs text-muted-foreground mt-2 space-y-1 ml-4 list-disc">
                       <li><strong>Too difficult:</strong> Only 25% answered correctly (ideal: 30-80%)</li>
-                      <li><strong>Weak discrimination:</strong> 0.15 is below the 0.20 threshold (doesn't separate high/low performers well)</li>
+                      <li><strong>Weak discrimination:</strong> 0.15 is below the 0.20 threshold (doesn&apos;t separate high/low performers well)</li>
                       <li><strong>Poor distractors:</strong> Only 50% are functional (ideal: ≥75%). Half the wrong answers are too obviously wrong.</li>
                     </ul>
                     <p className="text-xs text-muted-foreground mt-3">
@@ -393,7 +393,7 @@ export function ComprehensiveResults({ results, onDownload }: ComprehensiveResul
                 <strong>Criteria:</strong> p &gt; 0.80 or p &lt; 0.30 or r<sub>pb</sub> &lt; 0.20 or DE &lt; 75%
               </p>
               <p className="text-slate-600 dark:text-slate-400 italic">
-                Question may be too easy/hard, doesn't distinguish between strong and weak students, or has ineffective distractors.
+                Question may be too easy/hard, doesn&apos;t distinguish between strong and weak students, or has ineffective distractors.
               </p>
             </div>
           </div>

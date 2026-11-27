@@ -232,7 +232,7 @@ export function Step1UploadStudentData() {
             <AlertCircle className="h-6 w-6 text-yellow-600 mt-0.5" />
             <CardTitle>Map Your Column Names</CardTitle>
             <CardDescription>
-              We couldn't auto-detect all required columns. Please map them below.
+              We couldn&apos;t auto-detect all required columns. Please map them below.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6 pt-6">
@@ -299,7 +299,7 @@ export function Step1UploadStudentData() {
                   ))}
                 </select>
                 <p className="text-xs text-muted-foreground">
-                  Column containing exam version codes (solution rows should have Code = "0" or "00")
+                  Column containing exam version codes (solution rows should have Code = &quot;0&quot; or &quot;00&quot;)
                 </p>
               </div>
             </div>
