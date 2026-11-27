@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Undo/redo for re-grading changes
 - Import/export wizard state (JSON)
 
+---
+
+## [1.8.0] - 2026-11-27
+
 ### Added
 - Dummy data generator (`npm run gen:dummy`). It writes one synthetic exam in every input form the app accepts, plus independently computed expected results and planted problem questions. It can also simulate students for a real Shuffler Question Map (`--from-shuffler`).
 
