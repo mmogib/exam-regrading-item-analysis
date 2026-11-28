@@ -48,6 +48,7 @@ See `README.md` for installation and setup instructions.
 - P3: WIDE detection depends on the first row. It has an `it.fails` marker test.
 - P5: custom Shuffler version names in Options Matrix headers are not recognised.
 - P6–P11: older issues found in the P2 review (channel 004). They are not part of 1.8.1. P11 (a stale item-analysis file after a new Step 1 upload) is next.
+- P12 (low): Step 3 reads numeric version codes as numbers, so padded codes always need the code-mapping screen.
 - Minor wording issues.
 
 **Local-only data (gitignored)**
@@ -775,15 +776,18 @@ All of these predate the upgrade and were found while writing tests or reviewing
 **P2 (medium): fixed on `new-feat`, to be released as 1.8.1.** Comprehensive item statistics used to be computed per *version position*.
 - **The bug:** `p_i`, `D_i` and `r_pb` were computed per version position but labelled as master questions, while `DE` and the option statistics were per master question. With shuffled question order the rows mixed questions, so the decisions and KR-20 were wrong. KR-20 could be off in either direction.
 - **The fix:** `projectToMasterOrder()` in `lib/excel-utils.ts` puts every answer in master order before the analysis. It works on copies and keeps the row order, the version letters and the option permutations.
-- **Checks first:** it refuses to compute, with a clear error, when:
-  - the map is not one-to-one for a version that has students;
-  - a mapped question lacks a permutation or a correct letter;
+- **Checks first:** for each version that has students, it refuses to compute, with a clear error, when:
+  - the map is not one-to-one;
+  - a mapped question lacks a permutation or a single correct letter (multi-letter `Correct` metadata is rejected; multiple accepted answers belong in the solution row);
   - versions disagree on a question's master key;
-  - a student appears twice in a version;
-  - a version has no solution row.
-- **What changed and what didn't:** grades, cross-version analysis, `DE` and the option statistics are unchanged. The per-question statistics, decisions and KR-20 change.
-- **Tests:** in `tests/analysis.test.ts` (hand-checked) and `tests/dummy-data.test.ts`, against the oracle, which now includes `rpb` and either key.
-- **Review:** channel 004.
+  - a student appears twice in the version;
+  - the version has no solution row, or has solution rows that conflict;
+  - a required answer cell is missing (`""` is a blank answer).
+- **Normalisation:** the copies carry trimmed codes and trimmed, upper-case permutations and correct letters, so every helper matches them the same way.
+- **What changed and what didn't:** for valid, fully mapped inputs, grades, cross-version analysis, `DE` and the option statistics are unchanged. The per-question statistics, decisions and KR-20 *can* change. A single shuffled version, or versions sharing one shuffled order, were mislabelled too.
+- **Scope:** the checks cover the map's scalar keys. They do not re-check the map against the working key (P6, P11).
+- **Tests:** in `tests/analysis.test.ts` (hand-checked, including the guards, a single shuffled version, unequal versions and constant items), `tests/export-and-templates.test.ts` (shuffled export) and `tests/dummy-data.test.ts` (against the oracle, which now includes `rpb` and either key).
+- **Review:** channels 004 and 006.
 
 **Found in the P2 review (channel 004): pre-existing, open, not part of 1.8.1**
 - **P6 (medium):** `DE` and the option statistics take the correct answer from the map's single `correct` letter, not from the working key. A second accepted answer, or a key corrected in Step 2, is counted as a distractor.
@@ -791,6 +795,7 @@ All of these predate the upgrade and were found while writing tests or reviewing
 - **P8 (low):** KR-20 is undefined for an exam with one question: it comes out as NaN or Infinity, and the UI and export print it unguarded.
 - **P9 (low):** option `r_pb` uses the full total score, although a code comment says "rest score". The two definitions need to be stated.
 - **P10 (low):** the quartiles (T1–T4) and the 27% groups used for D have different tie rules. This is by design; it needs documenting.
+- **P12 (low):** Step 3 parses numeric version codes as numbers (`normalizeItemAnalysis`: `001` becomes `1`), so a map with padded codes always goes through the code-mapping screen, and its suggestion is correct. `validateCorrectAnswers` skips codes that have no solution row, so it must run after code mapping, which the UI does. Found while building the template dialog.
 - **P11 (medium, next):** uploading a new student file in Step 1 keeps the previously accepted item-analysis file (`updateStudentData` does not clear it), and that file is not checked again.
 
 **P3 (low): WIDE detection reads column names from the first data row only.**

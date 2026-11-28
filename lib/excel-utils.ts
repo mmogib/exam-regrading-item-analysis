@@ -2477,8 +2477,8 @@ function projectToMasterOrder(
   const masterKey = new Map<number, { letter: string; code: string }>();
 
   for (const code of activeCodes) {
-    const solution = solutionRows.find((row) => codeOf(row.Code) === code);
-    if (!solution) fail(`version ${code} has students but no solution row.`);
+    const solutions = solutionRows.filter((row) => codeOf(row.Code) === code);
+    if (solutions.length === 0) fail(`version ${code} has students but no solution row.`);
 
     const entries = itemAnalysisData.filter((ia) => codeOf(ia.code) === code);
     if (entries.length === 0) fail(`the item analysis file has no entries for version ${code}.`);
@@ -2507,6 +2507,11 @@ function projectToMasterOrder(
         fail(`version ${code}, master Q${master}: the option permutation "${ia.permutation ?? ""}" is missing or invalid.`);
       }
       const correct = String(ia.correct ?? "").trim().toUpperCase();
+      if (correct.length > 1) {
+        fail(
+          `version ${code}, master Q${master}: the item analysis "Correct" value "${ia.correct}" must be one option letter; multiple accepted answers belong in the solution row.`
+        );
+      }
       const index = LETTERS.indexOf(correct);
       if (correct.length !== 1 || index < 0 || index >= n) {
         fail(`version ${code}, master Q${master}: the correct answer "${ia.correct ?? ""}" is missing or not one of its ${n} options.`);
@@ -2521,22 +2526,51 @@ function projectToMasterOrder(
 
     for (let m = 1; m <= K; m++) {
       if (!byMaster.has(m)) fail(`version ${code} has no position for master Q${m}.`);
-      if (solution![String(byMaster.get(m))] === undefined) {
-        fail(`version ${code}: the student file has no question column ${byMaster.get(m)}.`);
+    }
+
+    // Every row of this version must have every mapped question; an empty cell
+    // ("") is a blank answer, a missing value is missing data
+    for (let p = 1; p <= K; p++) {
+      const col = String(p);
+      solutions.forEach((sol) => {
+        if (sol[col] === undefined || sol[col] === null) fail(`version ${code}: the solution row has no question ${p}.`);
+      });
+      if (solutions.length > 1) {
+        const keyOf = (sol: ExamRow) => [...parseSolutionCell(String(sol[col]))].sort().join("");
+        if (solutions.some((sol) => keyOf(sol) !== keyOf(solutions[0]))) {
+          fail(`version ${code} has ${solutions.length} solution rows with different answers for question ${p}.`);
+        }
+      }
+    }
+    for (const row of studentRows) {
+      if (codeOf(row.Code) !== code) continue;
+      for (let p = 1; p <= K; p++) {
+        const value = row[String(p)];
+        if (value === undefined || value === null) {
+          fail(`version ${code}: student "${codeOf(row.ID)}" has no value for question ${p} (a blank answer is an empty cell).`);
+        }
       }
     }
     positionsByCode.set(code, byMaster);
   }
 
+  // Copies with the codes, permutations and correct letters exactly as checked,
+  // so every downstream helper matches them the same way
   const rows = answersData.map((row) => {
-    const out: ExamRow = { ...row };
+    const out: ExamRow = { ...row, Code: codeOf(row.Code) };
     const byMaster = positionsByCode.get(codeOf(row.Code));
     if (byMaster) {
       for (let m = 1; m <= K; m++) out[String(m)] = row[String(byMaster.get(m))];
     }
     return out;
   });
-  const mappings = itemAnalysisData.map((ia) => ({ ...ia, order: ia.order_in_master }));
+  const mappings = itemAnalysisData.map((ia) => ({
+    ...ia,
+    code: codeOf(ia.code),
+    order: ia.order_in_master,
+    ...(ia.permutation !== undefined ? { permutation: String(ia.permutation).trim().toUpperCase() } : {}),
+    ...(ia.correct !== undefined ? { correct: String(ia.correct).trim().toUpperCase() } : {}),
+  }));
   return { rows, mappings };
 }
 

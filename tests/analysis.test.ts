@@ -1,9 +1,12 @@
 import { describe, it, expect } from "vitest";
 import {
+  buildCorrectAnswersMap,
   classifyStudentsByQuartile,
   computeAverageResults,
   computeCodeAverages,
   computeComprehensiveItemAnalysis,
+  computeResults,
+  getAllQuestionCols,
 } from "@/lib/excel-utils";
 import type { ItemAnalysisRow, StudentResult } from "@/types/exam";
 import { examRow } from "./helpers";
@@ -322,5 +325,152 @@ describe("comprehensive item analysis across versions (P2, hand-checked)", () =>
     it("the same student ID in two different versions is fine", () => {
       expect(run(itemAnalysis, [...answers, examRow("s1", "002", ["E", "E", "E"])])).not.toThrow();
     });
+    it("a missing student answer cell, but not an empty one", () => {
+      const missing = answers.map((r) => (r.ID === "t2" ? without(r, "2") : r));
+      expect(run(itemAnalysis, missing)).toThrow(/version 002: student "t2" has no value for question 2/);
+      expect(run(itemAnalysis, answers.map((r) => (r.ID === "t2" ? { ...r, "2": "" } : r)))).not.toThrow();
+    });
+    it("a solution row without a mapped question", () => {
+      const missing = answers.map((r) => (r.ID === "0" && r.Code === "002" ? without(r, "3") : r));
+      expect(run(itemAnalysis, missing)).toThrow(/version 002: the solution row has no question 3/);
+    });
+    it("conflicting solution rows for one version, in either order", () => {
+      const other = examRow("0", "002", ["B", "C", "A"]); // differs at position 3
+      expect(run(itemAnalysis, [...answers, other])).toThrow(/version 002 has 2 solution rows with different answers for question 3/);
+      expect(run(itemAnalysis, [other, ...answers])).toThrow(/different answers for question 3/);
+    });
+    it("identical duplicate solution rows are fine", () => {
+      expect(computeComprehensiveItemAnalysis([...answers, examRow("0", "002", ["B", "C", "C"])], itemAnalysis, 3)).toEqual(result);
+    });
+    it("multi-letter Correct metadata, with a clear message", () => {
+      expect(run(replace(0, { correct: "AB" }))).toThrow(
+        /"Correct" value "AB" must be one option letter; multiple accepted answers belong in the solution row/
+      );
+    });
+  });
+
+  it("gives every student the same grade and keeps every option count and DE", () => {
+    // Grades on the original (version-ordered) data, 5 points per question
+    const qCols = getAllQuestionCols(answers).slice(0, 3);
+    const grades = computeResults(answers, qCols, buildCorrectAnswersMap(answers, qCols));
+    expect(grades.map((g) => [g.ID, g.Tot])).toEqual([
+      ["s1", 15], ["s2", 10], ["s3", 5], ["s4", 0],
+      ["t1", 15], ["t2", 10], ["t3", 5], ["t4", 0],
+    ]);
+    const tots = grades.map((g) => g.Tot);
+    const mean = tots.reduce((a, b) => a + b, 0) / tots.length;
+    expect(result.testSummary.meanScore).toBe(mean);
+    expect(result.testSummary.stdDevScore).toBeCloseTo(Math.sqrt(tots.reduce((a, t) => a + (t - mean) ** 2, 0) / tots.length), 10);
+    // Options A..E, Blank/Other per master question (decoded to master letters)
+    const counts = (m: number) => result.optionStatistics.filter((o) => o.questionNumber === m).map((o) => o.count);
+    expect(counts(1)).toEqual([6, 1, 0, 1, 0, 0]);
+    expect(counts(2)).toEqual([0, 4, 0, 0, 4, 0]);
+    expect(counts(3)).toEqual([0, 0, 2, 0, 6, 0]);
+    expect(result.itemStatistics.map((s) => s.DE)).toEqual([50, 25, 25]);
+  });
+
+  it("matches codes, permutations and correct letters the same way everywhere", () => {
+    // Spaces, lower case and reordered mapping rows: same result as the clean input
+    const messy = [...itemAnalysis].reverse().map((ia) => ({
+      ...ia,
+      code: ` ${ia.code} `,
+      permutation: ` ${ia.permutation!.toLowerCase()} `,
+      correct: ` ${ia.correct!.toLowerCase()}`,
+    }));
+    const spaced = answers.map((r) => ({ ...r, Code: ` ${r.Code}` }));
+    expect(computeComprehensiveItemAnalysis(spaced, messy, 3)).toEqual(result);
+  });
+
+  it("works with alphanumeric codes and ignores a version with no students", () => {
+    const rename = (c: string) => (c.trim() === "001" ? "A1" : "B2");
+    const rows = [...answers.map((r) => ({ ...r, Code: rename(r.Code) })), examRow("0", "099", ["A", "B", "C"])];
+    const map = itemAnalysis.map((ia) => ({ ...ia, code: rename(String(ia.code)) }));
+    expect(computeComprehensiveItemAnalysis(rows, map, 3)).toEqual(result);
+  });
+
+  it("unequal version sizes", () => {
+    const fewer = answers.filter((r) => r.ID !== "t3" && r.ID !== "t4"); // 4 in 001, 2 in 002
+    const r = computeComprehensiveItemAnalysis(fewer, itemAnalysis, 3);
+    // Master correctness: s1 111, s2 110, s3 100, s4 000, t1 111, t2 110
+    expect(r.itemStatistics.map((s) => s.p_i)).toEqual([5 / 6, 4 / 6, 2 / 6]);
+    const matrix = [[1, 1, 1], [1, 1, 0], [1, 0, 0], [0, 0, 0], [1, 1, 1], [1, 1, 0]];
+    r.itemStatistics.forEach((s, m) => expect(s.r_pb).toBeCloseTo(restScoreCorrelation(matrix, m), 10));
+  });
+});
+
+/** Copy of a row without one question column. */
+function without(row: ReturnType<typeof examRow>, key: string) {
+  const copy = { ...row };
+  delete copy[key];
+  return copy;
+}
+
+/** Pearson correlation of 0/1 correctness on item m with items-correct minus that item. */
+function restScoreCorrelation(matrix: number[][], m: number): number {
+  const xs = matrix.map((c) => c[m]);
+  const ys = matrix.map((c, i) => c.reduce((a, b) => a + b, 0) - xs[i]);
+  const mean = (v: number[]) => v.reduce((a, b) => a + b, 0) / v.length;
+  const mx = mean(xs);
+  const my = mean(ys);
+  const sxy = xs.reduce((a, x, i) => a + (x - mx) * (ys[i] - my), 0);
+  const sxx = xs.reduce((a, x) => a + (x - mx) ** 2, 0);
+  const syy = ys.reduce((a, y) => a + (y - my) ** 2, 0);
+  return sxx === 0 || syy === 0 ? 0 : sxy / Math.sqrt(sxx * syy);
+}
+
+describe("comprehensive item analysis: one shuffled version (P2)", () => {
+  // One version whose positions show masters [2, 3, 1]; master key A, B, C.
+  // Older releases labelled position statistics as master questions here too.
+  const answers = [
+    examRow("0", "001", ["B", "C", "A"]),
+    examRow("a1", "001", ["B", "C", "A"]), // m2 m3 m1
+    examRow("a2", "001", ["B", "C", "E"]), // m2 m3
+    examRow("a3", "001", ["B", "E", "E"]), // m2
+    examRow("a4", "001", ["", "E", "E"]), // none (one blank)
+    examRow("a5", "001", ["E", "E", "A"]), // m1
+  ];
+  const map: ItemAnalysisRow[] = [
+    { code: "001", order: 1, order_in_master: 2, permutation: "ABCDE", correct: "B" },
+    { code: "001", order: 2, order_in_master: 3, permutation: "ABCDE", correct: "C" },
+    { code: "001", order: 3, order_in_master: 1, permutation: "ABCDE", correct: "A" },
+  ];
+  const r = computeComprehensiveItemAnalysis(answers, map, 3);
+
+  it("labels statistics by master question", () => {
+    // Per master 2/5, 3/5, 2/5 (per position it would be 3/5, 2/5, 2/5)
+    expect(r.itemStatistics.map((s) => s.p_i)).toEqual([0.4, 0.6, 0.4]);
+    // Upper 2 = a1, a2; lower 2 = a5, a4
+    expect(r.itemStatistics.map((s) => s.D_i)).toEqual([0, 1, 1]);
+    const matrix = [[1, 1, 1], [0, 1, 1], [0, 1, 0], [0, 0, 0], [1, 0, 0]];
+    r.itemStatistics.forEach((s, m) => expect(s.r_pb).toBeCloseTo(restScoreCorrelation(matrix, m), 10));
+  });
+});
+
+describe("comprehensive item analysis: constant items", () => {
+  // Q1 everyone correct, Q2 everyone blank, Q3 half correct with a constant rest score
+  const answers = [
+    examRow("0", "001", ["A", "B", "C"]),
+    examRow("c1", "001", ["A", "", "C"]),
+    examRow("c2", "001", ["A", "", "E"]),
+    examRow("c3", "001", ["A", "", "C"]),
+    examRow("c4", "001", ["A", "", "E"]),
+  ];
+  const map: ItemAnalysisRow[] = ["A", "B", "C"].map((correct, i) => ({
+    code: "001",
+    order: i + 1,
+    order_in_master: i + 1,
+    permutation: "ABCDE",
+    correct,
+  }));
+  const r = computeComprehensiveItemAnalysis(answers, map, 3);
+
+  it("returns finite zero correlations, as the oracle does", () => {
+    expect(r.itemStatistics.map((s) => s.p_i)).toEqual([1, 0, 0.5]);
+    expect(r.itemStatistics.map((s) => s.r_pb)).toEqual([0, 0, 0]);
+    const matrix = [[1, 0, 1], [1, 0, 0], [1, 0, 1], [1, 0, 0]];
+    [0, 1, 2].forEach((m) => expect(restScoreCorrelation(matrix, m)).toBe(0));
+    // items correct 2,1,2,1: var 0.25 = sum pq 0.25 -> KR-20 0
+    expect(r.testSummary.KR20).toBeCloseTo(0, 10);
+    expect(Number.isFinite(r.testSummary.KR20)).toBe(true);
   });
 });

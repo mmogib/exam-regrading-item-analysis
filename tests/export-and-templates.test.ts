@@ -95,6 +95,42 @@ describe("exportComprehensiveAnalysisToExcel", () => {
     expect(sheets["Option Analysis"]).toHaveLength(1 + 3 * 6);
     expect(sheets["Option Analysis"][1].slice(0, 3)).toEqual([1, "A*", 3]);
   });
+
+  it("writes master-question labels and values when versions shuffle the order (P2)", async () => {
+    // Version 002 shows masters [2, 3, 1]; master Q1 there has options BCADE (correct version letter C)
+    const answers = [
+      examRow("0", "001", ["A", "B", "C"]),
+      examRow("0", "002", ["B", "C", "C"]),
+      examRow("s1", "001", ["A", "B", "C"]),
+      examRow("s2", "001", ["A", "B", "E"]),
+      examRow("s3", "001", ["A", "E", "E"]),
+      examRow("s4", "001", ["D", "E", "E"]),
+      examRow("t1", "002", ["B", "C", "C"]),
+      examRow("t2", "002", ["B", "E", "C"]),
+      examRow("t3", "002", ["E", "E", "C"]),
+      examRow("t4", "002", ["E", "E", "A"]),
+    ];
+    const ia: ItemAnalysisRow[] = [
+      { code: "001", order: 1, order_in_master: 1, permutation: "ABCDE", correct: "A" },
+      { code: "001", order: 2, order_in_master: 2, permutation: "ABCDE", correct: "B" },
+      { code: "001", order: 3, order_in_master: 3, permutation: "ABCDE", correct: "C" },
+      { code: "002", order: 1, order_in_master: 2, permutation: "ABCDE", correct: "B" },
+      { code: "002", order: 2, order_in_master: 3, permutation: "ABCDE", correct: "C" },
+      { code: "002", order: 3, order_in_master: 1, permutation: "BCADE", correct: "C" },
+    ];
+    const result = computeComprehensiveItemAnalysis(answers, ia, 3);
+    exportComprehensiveAnalysisToExcel(result, "report.xlsx");
+
+    const sheets = readWorkbookSheets(await blobToBytes(savedBlob()));
+    expect(sheets["Summary"]).toContainEqual(["KR-20 Reliability", "0.750"]);
+    const items = sheets["Item Statistics"].slice(1);
+    expect(items.map((r) => r.slice(0, 2))).toEqual([[1, "0.750"], [2, "0.500"], [3, "0.250"]]);
+    expect(items.map((r) => r[5])).toEqual(result.itemStatistics.map((s) => s.decision));
+    // Master Q1's options, decoded to master letters: A x6 (correct), B x1, D x1
+    expect(sheets["Option Analysis"].slice(1, 7).map((r) => r.slice(0, 3))).toEqual([
+      [1, "A*", 6], [1, "B", 1], [1, "C", 0], [1, "D", 1], [1, "E", 0], [1, "Blank/Other", 0],
+    ]);
+  });
 });
 
 describe("templates round-trip through the import pipeline", () => {

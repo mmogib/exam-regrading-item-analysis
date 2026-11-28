@@ -8,15 +8,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
-- **Comprehensive analysis:** difficulty (p), discrimination (D) and point-biserial (r_pb) are now computed for each master question. Previously they were computed per question position in each version, so when versions shuffled the question order, each row mixed different questions.
-  - Re-run any comprehensive report made with an earlier version where the versions' question orders differ.
+- **Comprehensive analysis:** difficulty (p), discrimination (D) and item point-biserial (r_pb) are now computed and labelled by master question. Earlier reports used version positions, so they could pool different questions or put statistics under the wrong master-question label.
+  - Re-run an earlier comprehensive report if any version's question order differs from the master order. This includes a single shuffled version, and versions that all share the same shuffled order.
   - Per-question statistics, KEEP/REVISE/INVESTIGATE decisions and KR-20 may change, and KR-20 can go up or down.
-  - Grades, cross-version analysis, distractor efficiency and option statistics are not affected.
-- The comprehensive analysis now stops with a clear error instead of producing a wrong report when:
-  - the item analysis file does not map every question one-to-one for each version;
-  - a question lacks its option permutation or correct answer;
-  - versions disagree on a question's key;
-  - a student appears twice in one version.
+  - For valid, fully mapped inputs, grades, cross-version analysis, distractor efficiency and option statistics are unchanged by this correction.
+- **New checks:** the comprehensive analysis now checks each version that has students, and stops with a clear error for:
+  - an incomplete or non-one-to-one question map;
+  - a missing or invalid option permutation;
+  - a missing or invalid single correct letter;
+  - versions whose map keys disagree;
+  - a student listed twice in one version;
+  - a missing solution row, or conflicting solution rows;
+  - a missing answer cell (an empty cell still counts as a blank answer).
+- The item analysis file's `Correct` value must be a single letter. Solution rows can still contain several accepted answers.
 
 ### To Consider
 - Template download buttons in wizard steps
