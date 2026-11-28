@@ -26,6 +26,7 @@ See `README.md` for installation and setup instructions.
 
 **Release**
 - **Live:** v1.8.0 at https://regrading.netlify.app (Netlify site `regrading`). The version is shown in the page footer.
+- **Browser check:** the user checked the live v1.8.0 site on 2026-11-28; all good.
 - **Tags:** `v1.7.0`, `v1.7.1`, `v1.8.0` (annotated, pushed).
 - **Branches:** `new-feat` is the single development branch and `main` is the release branch. Releases fast-forward `main` to `new-feat`, so there are no merge commits.
 
