@@ -1,10 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { AlertCircle, CheckCircle2, FileSpreadsheet, Users, Hash } from 'lucide-react';
+import { AlertCircle, CheckCircle2, FileSpreadsheet, Users, Hash, Info } from 'lucide-react';
 import { FileDropZone } from '@/components/shared/file-drop-zone';
 import {
   readExamDataFileWithDetection,
@@ -18,8 +18,17 @@ import { ExamRow, ColumnDetectionResult } from '@/types/exam';
 import { error as logError } from '@/lib/logger';
 
 export function Step1UploadStudentData() {
-  const { updateStudentData, markStepComplete } = useWizard();
+  const { state, updateStudentData, dismissNotice } = useWizard();
   const [loading, setLoading] = useState(false);
+  // A read that finishes after a newer read started, or after leaving Step 1, is ignored
+  const readToken = useRef(0);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const [error, setError] = useState<string | null>(null);
   const [uploadedFile, setUploadedFile] = useState<{
     name: string;
@@ -40,6 +49,8 @@ export function Step1UploadStudentData() {
   const [tempFileName, setTempFileName] = useState('');
 
   const handleFileSelect = async (file: File) => {
+    const token = ++readToken.current;
+    const current = () => token === readToken.current && mounted.current;
     setLoading(true);
     setError(null);
     setUploadedFile(null);
@@ -47,6 +58,7 @@ export function Step1UploadStudentData() {
 
     try {
       const { rawData: fileData, detection: fileDetection } = await readExamDataFileWithDetection(file);
+      if (!current()) return;
 
       if (!fileDetection.valid) {
         // Check if we can show mapping UI or if it's a fatal error
@@ -73,10 +85,11 @@ export function Step1UploadStudentData() {
       completeFileUpload(data, file.name);
 
     } catch (err: any) {
+      if (!current()) return;
       logError('Error reading student data file:', err);
       setError(err.message || 'Failed to read file. Please check the format and try again.');
     } finally {
-      setLoading(false);
+      if (current()) setLoading(false);
     }
   };
 
@@ -120,10 +133,28 @@ export function Step1UploadStudentData() {
 
     setUploadedFile(fileInfo);
 
-    // Update wizard state
+    // Update wizard state: this also completes Step 1 and clears Steps 2 and 3 (P11)
     updateStudentData(data, guessedNumQuestions, fileName);
-    markStepComplete(1);
   };
+
+  const notice = state.notice;
+  const noticeText = notice
+    ? [
+        notice.kind === 'session-upgraded'
+          ? 'This saved session was opened by a newer version of the app. Your student data, including any corrected answer key, is kept.'
+          : 'New student data loaded.',
+        notice.itemAnalysisRemoved
+          ? `The item analysis file${notice.itemAnalysisFileName ? ` "${notice.itemAnalysisFileName}"` : ''} was removed because it was checked against ${
+              notice.kind === 'session-upgraded' ? 'the data in an older version' : 'the previous student data'
+            }. Upload it again in Step 3.`
+          : '',
+        notice.regradeReset && notice.kind === 'student-data-replaced'
+          ? "Re-grading of the previous file was reset; the new file's own answer key is used."
+          : '',
+      ]
+        .filter(Boolean)
+        .join(' ')
+    : null;
 
   return (
     <div className="space-y-6">
@@ -148,6 +179,19 @@ export function Step1UploadStudentData() {
               <AlertCircle className="h-4 w-4" />
               <AlertTitle>Upload Error</AlertTitle>
               <AlertDescription className="whitespace-pre-wrap">{error}</AlertDescription>
+            </Alert>
+          )}
+
+          {noticeText && (
+            <Alert className="border-yellow-300 bg-yellow-50 dark:bg-yellow-950/20" role="status">
+              <Info className="h-4 w-4 text-yellow-700" />
+              <AlertTitle>Later steps were reset</AlertTitle>
+              <AlertDescription className="flex flex-wrap items-start justify-between gap-2">
+                <span>{noticeText}</span>
+                <Button variant="outline" size="sm" onClick={dismissNotice}>
+                  OK
+                </Button>
+              </AlertDescription>
             </Alert>
           )}
 

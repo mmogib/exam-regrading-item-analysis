@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **A new student file now resets the later steps.**
+  - A successful Step 1 upload, even of the same file, clears the accepted item analysis file and the previous re-grading, and returns to Step 1, with a notice saying what was removed. Before this, Step 4 could analyse the new students with the item analysis file of another exam.
+  - An item analysis file whose check finishes after the student data changed is no longer accepted.
+  - A Step 1 read that finishes after leaving Step 1 is ignored.
+  - Sessions saved by earlier versions keep their student data (including a corrected key), but need the item analysis file uploaded again.
 - Step 1's column-mapping hint now describes solution rows correctly (ID 0 with the version's real code).
 - Step 3's answer-mismatch message says "the item analysis file says …" instead of "QUESTIONS_MAP says …", which was wrong for Options Matrix and other formats.
 

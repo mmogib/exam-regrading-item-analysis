@@ -30,7 +30,7 @@ See `README.md` for installation and setup instructions.
 - **Browser check:** the user checked the live v1.8.0 site on 2026-11-28; all good.
 - **Tags:** `v1.7.0`, `v1.7.1`, `v1.8.0`, `v1.8.1`, `v1.9.0` (annotated, pushed).
 - **1.9.0:** the Download Template dialog (channels 005, 007 and 008; `references/TEMPLATE_DIALOG_FEATURE.md`). The user tested it in the browser, including Excel, focus, Escape and a narrow window.
-- **Next:** P11 (stale item-analysis file after a new Step 1 upload).
+- **Next:** release 1.9.1: P11 (done on `new-feat`), the wording fixes (done), and the batch P3, P5–P10, P12 (plans in channel 010).
 - **Branches:** `new-feat` is the single development branch and `main` is the release branch. Releases fast-forward `main` to `new-feat`, so there are no merge commits.
 
 **Release procedure**
@@ -49,7 +49,8 @@ See `README.md` for installation and setup instructions.
 - P2: fixed in 1.8.1 (channels 004 and 006).
 - P3: WIDE detection depends on the first row. It has an `it.fails` marker test.
 - P5: custom Shuffler version names in Options Matrix headers are not recognised.
-- P6–P11: older issues found in the P2 review (channel 004). They are not part of 1.8.1. P11 (a stale item-analysis file after a new Step 1 upload) is next.
+- P6–P10: older issues found in the P2 review (channel 004); planned for 1.9.1 (channel 010).
+- P11: fixed on `new-feat`, for 1.9.1 (channel 009).
 - P12 (low): Step 3 reads numeric version codes as numbers, so padded codes always need the code-mapping screen.
 - Minor wording issues: fixed on `new-feat`, for 1.9.1.
 
@@ -144,6 +145,7 @@ interface WizardState {
   studentData: ExamRow[] | null;
   studentDataFileName: string | null;
   numQuestions: number;
+  studentRevision: number;        // P11: goes up on every import, key-changing re-grade and Start Over
   correctAnswersMap: CorrectAnswersMap | null;
   hasRegraded: boolean;
   itemAnalysisData: ItemAnalysisRow[] | null;
@@ -151,11 +153,12 @@ interface WizardState {
   hasPermutation: boolean;
   currentStep: number;
   completedSteps: number[];
+  notice: WizardNotice | null;    // transient Step 1 message; never saved
 }
 ```
 
 **localStorage Persistence:**
-- Storage key: `kfupm_exam_wizard_v1`
+- Storage key: `kfupm_exam_wizard_v1`; stored version 2 since v1.9.1. Version-1 sessions are migrated once by `migrateStoredState`: the student data are kept, and the item analysis and re-grade state are dropped (P11).
 - Version control for breaking changes
 - Auto-saves on state updates
 - Restores state on page refresh
@@ -798,7 +801,12 @@ All of these predate the upgrade and were found while writing tests or reviewing
 - **P9 (low):** option `r_pb` uses the full total score, although a code comment says "rest score". The two definitions need to be stated.
 - **P10 (low):** the quartiles (T1–T4) and the 27% groups used for D have different tie rules. This is by design; it needs documenting.
 - **P12 (low):** Step 3 parses numeric version codes as numbers (`normalizeItemAnalysis`: `001` becomes `1`), so a map with padded codes always goes through the code-mapping screen, and its suggestion is correct. `validateCorrectAnswers` skips codes that have no solution row, so it must run after code mapping, which the UI does. Found while building the template dialog.
-- **P11 (medium, next):** uploading a new student file in Step 1 keeps the previously accepted item-analysis file (`updateStudentData` does not clear it), and that file is not checked again.
+- **P11 (medium): fixed on `new-feat`, for 1.9.1 (channel 009).** A new Step 1 upload used to keep the accepted item-analysis file and the Step 2 state, so Step 4 could analyse new students with another exam's map. Every successful Step 1 import, including identical rows, now clears Steps 2 and 3 and returns to Step 1 (`applyNewStudentData`).
+  - Acceptance is bound to `studentRevision`, so a Step 3 check that finishes after the data changed is dropped, together with its Step 3 completion (`acceptItemAnalysis`, `acceptItemAnalysisTransition`).
+  - Start Over keeps counting the revision up.
+  - Step 1 ignores late reads.
+  - Saved sessions from older versions are migrated once (storage version 2, `migrateStoredState`): the student data are kept, the item analysis is dropped.
+  - Tests: `tests/student-data-replacement.test.ts`.
 
 **P3 (low): WIDE detection reads column names from the first data row only.**
 - SheetJS omits blank cells, so a file whose first row has an empty `Master_Correct` is detected as UNKNOWN.

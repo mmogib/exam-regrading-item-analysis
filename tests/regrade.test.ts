@@ -29,6 +29,7 @@ const baseState = (overrides: Partial<WizardState> = {}): WizardState => ({
   studentData: data,
   studentDataFileName: "exam.xlsx",
   numQuestions: 2,
+  studentRevision: 1,
   correctAnswersMap: null,
   hasRegraded: false,
   itemAnalysisData: null,
@@ -36,6 +37,7 @@ const baseState = (overrides: Partial<WizardState> = {}): WizardState => ({
   hasPermutation: false,
   currentStep: 2,
   completedSteps: [1],
+  notice: null,
   ...overrides,
 });
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Card,
   CardContent,
@@ -52,8 +52,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
+const STALE_MESSAGE =
+  "The student data changed while this file was being checked. Upload the item analysis file again.";
+
 export function Step3UploadItemAnalysis() {
-  const { state, updateItemAnalysis, markStepComplete } = useWizard();
+  const { state, acceptItemAnalysis } = useWizard();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
@@ -79,6 +82,14 @@ export function Step3UploadItemAnalysis() {
   >(null);
   const [tempHasPermutation, setTempHasPermutation] = useState(false);
   const [tempFileName, setTempFileName] = useState("");
+  // Student-data revision the pending mapping screen was built for (P11)
+  const [tempRevision, setTempRevision] = useState<number | null>(null);
+
+  // The latest student-data revision, for work that finishes after a render (P11)
+  const latestRevision = useRef(state.studentRevision);
+  useEffect(() => {
+    latestRevision.current = state.studentRevision;
+  }, [state.studentRevision]);
 
   const [uploadedFile, setUploadedFile] = useState<{
     name: string;
@@ -100,6 +111,7 @@ export function Step3UploadItemAnalysis() {
   }
 
   const handleFileSelect = async (file: File) => {
+    const revision = state.studentRevision;
     setLoading(true);
     setError(null);
     setWarning(null);
@@ -121,10 +133,10 @@ export function Step3UploadItemAnalysis() {
         // Parse WIDE format first
         const parsedData = parseWideFormat(detection.data, detection.columns);
         logDebug({ WIDE: parsedData });
-        await processItemAnalysis(file.name, parsedData, "WIDE");
+        await processItemAnalysis(file.name, parsedData, "WIDE", revision);
       } else {
         // Auto-detected format (OLD or NEW) - parse immediately
-        await processItemAnalysis(file.name, detection.data, detection.format);
+        await processItemAnalysis(file.name, detection.data, detection.format, revision);
       }
     } catch (err: any) {
       logError("Error reading item analysis file:", err);
@@ -152,7 +164,7 @@ export function Step3UploadItemAnalysis() {
     setError(null);
     try {
       const parsedData = parseCSVWithMapping(csvDetection.data, columnMapping);
-      await processItemAnalysis("Custom mapped file", parsedData, "MAPPED");
+      await processItemAnalysis("Custom mapped file", parsedData, "MAPPED", state.studentRevision);
       setShowMappingUI(false);
     } catch (err: any) {
       logError("Error parsing with custom mapping:", err);
@@ -165,7 +177,8 @@ export function Step3UploadItemAnalysis() {
   const checkCodeMismatch = (
     parsedData: ItemAnalysisRow[],
     hasPerm: boolean,
-    fileName: string
+    fileName: string,
+    revision: number
   ) => {
     // Get codes from student data (from Step 1)
     const students = state.studentData!.filter((row) => !isSolutionRow(row));
@@ -217,6 +230,7 @@ export function Step3UploadItemAnalysis() {
       setTempItemAnalysisData(parsedData);
       setTempHasPermutation(hasPerm);
       setTempFileName(fileName);
+      setTempRevision(revision);
       setCodeMapping(suggested);
       setItemAnalysisCodes(sortedItemCodes);
       setUsedCodes(sortedAnswerCodes);
@@ -230,7 +244,8 @@ export function Step3UploadItemAnalysis() {
   const processItemAnalysis = async (
     fileName: string,
     data: any[],
-    format: string
+    format: string,
+    revision: number
   ) => {
     let parsedData: ItemAnalysisRow[];
 
@@ -260,7 +275,7 @@ export function Step3UploadItemAnalysis() {
     }
 
     // Check for code mismatch FIRST (before validation)
-    const codesMatch = checkCodeMismatch(parsedData, hasPerm, fileName);
+    const codesMatch = checkCodeMismatch(parsedData, hasPerm, fileName, revision);
     if (!codesMatch) {
       // Code mapping UI is shown, wait for user confirmation
       return;
@@ -277,11 +292,16 @@ export function Step3UploadItemAnalysis() {
     }
 
     // Validation passed - complete the step
-    completeStep(parsedData, hasPerm, fileName);
+    completeStep(parsedData, hasPerm, fileName, revision);
   };
 
   const handleAcceptCodeMapping = () => {
     if (!tempItemAnalysisData) return;
+    if (tempRevision !== state.studentRevision) {
+      setShowCodeMappingUI(false);
+      setError(STALE_MESSAGE);
+      return;
+    }
 
     // Apply code mapping
     const reverseMapping: { [itemCode: string]: string } = {};
@@ -313,14 +333,19 @@ export function Step3UploadItemAnalysis() {
     }
 
     setShowCodeMappingUI(false);
-    completeStep(mappedItemAnalysis, tempHasPermutation, tempFileName);
+    completeStep(mappedItemAnalysis, tempHasPermutation, tempFileName, tempRevision);
   };
 
   const completeStep = (
     parsedData: ItemAnalysisRow[],
     hasPerm: boolean,
-    fileName: string
+    fileName: string,
+    revision: number
   ) => {
+    if (revision !== latestRevision.current) {
+      setError(STALE_MESSAGE);
+      return;
+    }
     setUploadedFile({
       name: fileName,
       data: parsedData,
@@ -328,9 +353,8 @@ export function Step3UploadItemAnalysis() {
       rowCount: parsedData.length,
     });
 
-    // Update wizard state
-    updateItemAnalysis(parsedData, hasPerm, fileName);
-    markStepComplete(3);
+    // Accept the file and complete Step 3 in one step, bound to the validated revision
+    acceptItemAnalysis(parsedData, hasPerm, fileName, revision);
   };
 
   return (
