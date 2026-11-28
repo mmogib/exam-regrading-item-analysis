@@ -29,7 +29,7 @@ See `README.md` for installation and setup instructions.
 - **Live:** v1.8.1 at https://regrading.netlify.app (Netlify site `regrading`). The version is shown in the page footer.
 - **Browser check:** the user checked the live v1.8.0 site on 2026-11-28; all good.
 - **Tags:** `v1.7.0`, `v1.7.1`, `v1.8.0`, `v1.8.1` (annotated, pushed).
-- **Next:** the template dialog (1.9.0). Its design was reviewed in channel 005 and its implementation is under review in 007; the work is held in a git stash until then. See `references/TEMPLATE_DIALOG_FEATURE.md`.
+- **Next:** the template dialog (1.9.0): designed in 005, implemented and fixed after 007, re-verification in 008. See `references/TEMPLATE_DIALOG_FEATURE.md`.
 - **Branches:** `new-feat` is the single development branch and `main` is the release branch. Releases fast-forward `main` to `new-feat`, so there are no merge commits.
 
 **Release procedure**
@@ -72,7 +72,7 @@ The application is a client-side only Next.js app with static export capability.
 
 1. **Step 1: Upload Student Data** (`components/wizard/step1-upload-student-data.tsx`)
    - Upload exam answer sheet (.xls/.xlsx/.csv/.txt)
-   - **Download template button** for quick start
+   - **Download Template dialog** (`components/wizard/template-dialog.tsx`): synthetic grading-center exam; see "Template Dialog" below
    - **Fuzzy column detection**: Accepts flexible column names (ID, Student ID, Code, Version, etc.)
    - **Manual column mapping** if auto-detection fails
    - Auto-detect number of questions using `guessNumQuestions()`
@@ -88,7 +88,7 @@ The application is a client-side only Next.js app with static export capability.
 
 3. **Step 3: Item Analysis Upload** (`components/wizard/step3-upload-item-analysis.tsx`) - Optional
    - **Format selection guide**: Collapsible help to choose the right format
-   - **Download templates**: Three formats available
+   - **Fixed example files** (template downloads): Three formats available
      - **Normal**: Basic question mapping (cross-version analysis only)
      - **Question Map**: With permutation data (full psychometric analysis)
      - **Options Matrix**: WIDE format with option-level tracking
@@ -832,6 +832,20 @@ All of these predate the upgrade and were found while writing tests or reviewing
   - Too easy: REVISE 19/20.
   - Low discrimination: never KEEP.
 - **Design review:** channel 003; Codex changes adopted, trimmed.
+
+### Template Dialog (v1.9.0, November 2026)
+
+- **UI:** `components/wizard/template-dialog.tsx`, opened by Step 1's "Download Template" (shadcn `components/ui/dialog.tsx`, `@radix-ui/react-dialog`). It never touches wizard state.
+- **Core:** `lib/grading-center.ts`, pure. `buildGradingCenterSnapshot(settings, source?)` returns one frozen snapshot: the files, the exported dataset and the expected results.
+  - **Shuffler input:** its own strict CSV reader (`parseCsv`) and `readShufflerFile` for a Question Map or an Options Matrix, with any `<name>_Q`/`<name>_Opt` pairs and 2–5 options. It validates bijections, keys, labels and pairs, and rejects version codes that Step 3 would read as the same number (`step3Code`). It then feeds a canonical Question Map to `datasetFromQuestionMap`.
+  - **Layout:** `form, ID, Section, Code, 1..125` as a one-sheet .xlsx. `form` is numeric and the rest is text. Solution rows come first (`000000000`, `00`). IDs are unique, synthetic and 9 digits.
+  - **Scan errors (preset, off by default):** `X` on answered responses (it imports as blank), one `@` in an ID (`maskOneDigit`, which keeps (Code, ID) unique), and `@@` sections.
+  - **Oracle:** `expectedResults` on the *exported* dataset (final IDs, X as blank). With a planted wrong key it adds `afterCorrectingTheKey`.
+  - **Codes:** numeric source codes are padded (1 → 001), an accepted design change. The JSON keeps the true source codes (`versionCodes[].source`).
+  - **Cap:** 5000 students (5000 × 125 takes about 1–2 s to write).
+- **UI rules:** Generate waits for a pending file read. Any edit or new file withdraws the downloads. Closing the dialog cancels a pending read or generation and keeps a finished snapshot. `FileDropZone` has one input per instance (`useId`), and `fileRejection` applies to dropped and chosen files alike.
+- **Tests:** `tests/grading-center.test.ts` (import → Step 3 → Step 4 against the oracle; codes; originals and P3/P5; malformed files; rates; corrected key; Normal companion; bounds; the local Shuffler pair), `tests/template-dialog.test.ts` (jsdom: open, generate, invalidate, Escape, pending-read and close races, downloads), and `tests/file-drop-zone.test.ts`.
+- **Review:** channels 005 (design), 007 (implementation) and 008 (re-verification). The topic note is `references/TEMPLATE_DIALOG_FEATURE.md`.
 
 ## Key Business Logic
 

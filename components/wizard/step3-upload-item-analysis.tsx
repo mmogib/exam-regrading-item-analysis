@@ -492,9 +492,10 @@ export function Step3UploadItemAnalysis() {
           <div className="border rounded-lg p-4 bg-muted/30">
             <div className="flex items-center justify-between mb-3">
               <div>
-                <p className="text-sm font-semibold">Download Template Files</p>
+                <p className="text-sm font-semibold">Fixed Example Files</p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Choose the format that matches your needs
+                  Small fixed examples that match the fixed example in Step 1. For an exam generated with
+                  Step 1&apos;s Download Template, use the files generated with it.
                 </p>
               </div>
             </div>

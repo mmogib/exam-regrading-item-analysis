@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Download Template dialog (Step 1).**
+  - It generates a realistic answer file in the KFUPM grading-center layout (.xlsx: form, ID, Section, Code, 1–125) with simulated students, up to 5000.
+  - It also gives the matching Step 3 files and the expected results (.json).
+  - Optionally, it starts from your Shuffler Question Map or Options Matrix.
+  - Options: planted problem questions, a planted wrong key (with a Shuffler file), and grading-center scan errors (`X` multiple marks, unreadable `@` ID digits and `@@` sections).
+  - The generated files use version codes 001, 002, ...; Step 3 asks you to confirm them against your Shuffler file's codes.
+
+### Changed
+- Step 3's template buttons are labelled as fixed examples. The matching fixed student example is in the Step 1 dialog.
+- File drop zones check dropped files against the allowed types and size, the same as chosen files, and each drop zone opens its own file chooser.
+
 ### To Consider
 - Template download buttons in wizard steps
 - Help tooltips or info buttons per step

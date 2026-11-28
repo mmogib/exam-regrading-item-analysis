@@ -22,7 +22,8 @@ import {
 let templateDataset: DummyDataset | null = null;
 const dataset = () => (templateDataset ??= buildDataset(TEMPLATE_PRESET));
 
-function download(content: BlobPart, type: string, filename: string): void {
+/** Save content as a file through a temporary link (also used by the template dialog). */
+export function downloadFile(content: BlobPart, type: string, filename: string): void {
   const blob = new Blob([content], { type });
   const url = window.URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -36,20 +37,20 @@ const CSV = "text/csv;charset=utf-8;";
 
 /** Student answer sheet with solution rows: 4 versions, 20 questions, 5 students per version. */
 export function generateExamTemplate(): void {
-  download(toWorkbookBytes(studentTable(dataset())), "application/octet-stream", DOWNLOAD_FILENAMES.templates.examDataTemplate);
+  downloadFile(toWorkbookBytes(studentTable(dataset())), "application/octet-stream", DOWNLOAD_FILENAMES.templates.examDataTemplate);
 }
 
 /** Normal format (question mapping only): cross-version analysis. */
 export function generateItemAnalysisNormalTemplate(): void {
-  download(toDelimited(normalTable(dataset().exam)), CSV, DOWNLOAD_FILENAMES.templates.itemAnalysisNormal);
+  downloadFile(toDelimited(normalTable(dataset().exam)), CSV, DOWNLOAD_FILENAMES.templates.itemAnalysisNormal);
 }
 
 /** Question Map (with permutation and key): full psychometric analysis. */
 export function generateItemAnalysisWithPermutationTemplate(): void {
-  download(toDelimited(questionMapTable(dataset().exam)), CSV, DOWNLOAD_FILENAMES.templates.itemAnalysisWithPermutation);
+  downloadFile(toDelimited(questionMapTable(dataset().exam)), CSV, DOWNLOAD_FILENAMES.templates.itemAnalysisWithPermutation);
 }
 
 /** Options Matrix (current Shuffler direction): full psychometric analysis. */
 export function generateItemAnalysisWideTemplate(): void {
-  download(toDelimited(optionsMatrixTable(dataset().exam)), CSV, DOWNLOAD_FILENAMES.templates.itemAnalysisWide);
+  downloadFile(toDelimited(optionsMatrixTable(dataset().exam)), CSV, DOWNLOAD_FILENAMES.templates.itemAnalysisWide);
 }

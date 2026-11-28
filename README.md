@@ -9,7 +9,7 @@ Four-step guided process for exam grading and analysis:
 
 **Step 1: Upload Student Data** (Required)
 - Upload exam answer sheets (Excel or CSV format)
-- **Download template** button for quick start
+- **Download Template** dialog: generates a realistic answer file (.xlsx, grading-center layout) with simulated students, optionally from your Shuffler Question Map or Options Matrix, plus matching Step 3 files and the expected results (see "Template dialog" below)
 - **Fuzzy column detection**: Accepts flexible column names (ID, Student ID, Code, Version, etc.)
 - **Manual column mapping** if auto-detection fails
 - Auto-detect number of questions
@@ -26,7 +26,7 @@ Four-step guided process for exam grading and analysis:
 
 **Step 3: Item Analysis Upload** (Optional)
 - **Format selection guide**: Interactive help to choose the right format
-- **Download templates**: Three formats available
+- **Fixed example files**: Three formats available (small fixed examples that match the fixed example in Step 1)
   - **Normal**: Basic question mapping (cross-version analysis only)
   - **Question Map**: With permutation data (full psychometric analysis) - from [Shuffler Tool](https://shuffler.mshahrani.website)
   - **Options Matrix**: WIDE format with option-level tracking - from [Shuffler Tool](https://shuffler.mshahrani.website)
@@ -128,6 +128,20 @@ npm run lint      # ESLint (Next.js core-web-vitals rules)
 
 The tests in `tests/` use synthetic data only. If a local `sample_files/` folder exists (it is gitignored, because it may hold real exam data), `tests/samples.local.test.ts` also compares results on those files against a baseline stored in `sample_files/__baseline__/`. The first run writes the baseline. After an explained, intended change, update it with `npx vitest run tests/samples.local.test.ts -u`.
 
+## Template dialog
+
+Step 1's **Download Template** button opens a dialog that generates a synthetic exam for trying out or testing the app. Everything is simulated; there are no real students.
+
+- **Exam:** either from the settings (questions, versions), or from your exam's Shuffler **Question Map** or **Options Matrix** (.csv), whose questions, versions, order and answer key are used.
+- **Settings:** students (up to 5000), sections, seed (the same seed gives the same file), blank answers, planted problem questions, and with a Shuffler file a planted wrong key.
+- **Grading-center scan errors** (optional): multiple marks printed as `X` (a share of answered questions; the app imports `X` as a blank), an unreadable ID digit `@`, and an unreadable section `@@`.
+- **Files:**
+  - the student data (.xlsx) in the grading-center layout: `form, ID, Section, Code, 1–125`, solution rows first (ID `000000000`, Section `00`);
+  - the matching Question Map for Step 3 (and, without a Shuffler file, the matching Options Matrix and Normal files);
+  - with a Shuffler file, your uploaded file unchanged (the dialog says whether Step 3 can read it as it is);
+  - the expected results (.json): grades and item statistics computed independently of the app, from the exported data.
+- **Version codes:** the generated files use 001, 002, ... for numeric Shuffler versions (1, 2, ...). Step 3 reads codes as numbers and shows its code-mapping screen; accept the suggested mapping. The expected results record your file's original codes too.
+
 ## Dummy Data for Testing and Demos
 
 ```bash
@@ -173,7 +187,7 @@ netlify deploy --prod --dir=out
     - NEW format: Solution identified by ID="0"
     - OLD format (backwards compatible): ID="000000000"
   - Supports alphanumeric codes (V1, A, 002, etc.)
-  - **Download template button** in Step 1 provides correct format
+  - **Download Template** in Step 1 generates a file in the correct format
 
 - **Output** (Step 2 - Re-grading):
   - `exam-data-regraded.xlsx`: Updated answer sheet with revised solutions
@@ -284,9 +298,9 @@ If exam version codes don't match between files:
   - Quick decision helper
 
 **Template System:**
+- **Template dialog (Step 1)**: configurable synthetic exam in the grading-center layout; see "Template dialog" below
+- **Fixed examples**: one small fixed student file (in the dialog) and three item analysis files (Step 3) that describe the same exam
 - **Dynamic template generation**: Templates always match current codebase structure
-- **Download buttons**: Available in Steps 1 and 3
-- **Four templates**: Student data (4 versions, 20 questions), Normal, Question Map, Options Matrix
 - **Zero maintenance**: No static files to update manually
 - **Configurable**: Shuffler Tool URL in config/downloads.json
 
