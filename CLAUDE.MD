@@ -26,10 +26,11 @@ See `README.md` for installation and setup instructions.
 ## Current State (as of 2026-11-28)
 
 **Release**
-- **Live:** v1.8.1 at https://regrading.netlify.app (Netlify site `regrading`). The version is shown in the page footer.
+- **Live:** v1.9.0 at https://regrading.netlify.app (Netlify site `regrading`). The version is shown in the page footer.
 - **Browser check:** the user checked the live v1.8.0 site on 2026-11-28; all good.
-- **Tags:** `v1.7.0`, `v1.7.1`, `v1.8.0`, `v1.8.1` (annotated, pushed).
-- **Next:** the template dialog (1.9.0): designed in 005, implemented and fixed after 007, re-verification in 008. See `references/TEMPLATE_DIALOG_FEATURE.md`.
+- **Tags:** `v1.7.0`, `v1.7.1`, `v1.8.0`, `v1.8.1`, `v1.9.0` (annotated, pushed).
+- **1.9.0:** the Download Template dialog (channels 005, 007 and 008; `references/TEMPLATE_DIALOG_FEATURE.md`). The user tested it in the browser, including Excel, focus, Escape and a narrow window.
+- **Next:** P11 (stale item-analysis file after a new Step 1 upload).
 - **Branches:** `new-feat` is the single development branch and `main` is the release branch. Releases fast-forward `main` to `new-feat`, so there are no merge commits.
 
 **Release procedure**
@@ -833,7 +834,7 @@ All of these predate the upgrade and were found while writing tests or reviewing
   - Low discrimination: never KEEP.
 - **Design review:** channel 003; Codex changes adopted, trimmed.
 
-### Template Dialog (v1.9.0, November 2026)
+### Template Dialog (v1.9.0, released 2026-11-28)
 
 - **UI:** `components/wizard/template-dialog.tsx`, opened by Step 1's "Download Template" (shadcn `components/ui/dialog.tsx`, `@radix-ui/react-dialog`). It never touches wizard state.
 - **Core:** `lib/grading-center.ts`, pure. `buildGradingCenterSnapshot(settings, source?)` returns one frozen snapshot: the files, the exported dataset and the expected results.

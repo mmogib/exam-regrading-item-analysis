@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### To Consider
+- Template download buttons in wizard steps
+- Help tooltips or info buttons per step
+- Undo/redo for re-grading changes
+- Import/export wizard state (JSON)
+
+---
+
+## [1.9.0] - 2026-11-28
+
 ### Added
 - **Download Template dialog (Step 1).**
   - It generates a realistic answer file in the KFUPM grading-center layout (.xlsx: form, ID, Section, Code, 1–125) with simulated students, up to 5000.
@@ -18,12 +28,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Step 3's template buttons are labelled as fixed examples. The matching fixed student example is in the Step 1 dialog.
 - File drop zones check dropped files against the allowed types and size, the same as chosen files, and each drop zone opens its own file chooser.
-
-### To Consider
-- Template download buttons in wizard steps
-- Help tooltips or info buttons per step
-- Undo/redo for re-grading changes
-- Import/export wizard state (JSON)
 
 ---
 
