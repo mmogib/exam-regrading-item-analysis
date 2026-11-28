@@ -44,11 +44,11 @@ See `README.md` for installation and setup instructions.
 - Dummy data: `npm run gen:dummy`; see README.
 
 **Open issues** (details under "November 2026 Updates → Known Issues")
-- P2: comprehensive item statistics are per version position, not per master question.
-- P3: WIDE detection depends on the first row.
+- P2: **fixed on `new-feat`** (not released). Release 1.8.1 waits for Codex's re-verification (channel 006).
+- P3: WIDE detection depends on the first row. It has an `it.fails` marker test.
 - P5: custom Shuffler version names in Options Matrix headers are not recognised.
+- P6–P11: older issues found in the P2 review (channel 004). They are not part of 1.8.1. P11 (a stale item-analysis file after a new Step 1 upload) is next.
 - Minor wording issues.
-- Each of P2 and P3 has an `it.fails` marker test.
 
 **Local-only data (gitignored)**
 - `sample_files/`: real exam data, plus `shuffler_latest/`, a Shuffler v1.9.0 export including the `.tex`, and `__baseline__/`, the regression baseline for `tests/samples.local.test.ts`.
@@ -772,10 +772,26 @@ All of these predate the upgrade and were found while writing tests or reviewing
 - The Shuffler documents `Option` as the original letter and `[Version]_Opt` as the letter it became. `parseWideFormat()` reads it that way, and the January reverse lookup is correct.
 - Only an older sample export (`OPTIONS_MATRIX_Math 201…`) used the opposite direction. Old files are out of scope; their Question Map works.
 
-**P2 (medium): comprehensive item stats mix questions across versions.**
-- `computeComprehensiveItemAnalysis()` computes `p_i`, `D_i` and `r_pb` per *version position* (`qCols[i]`), but labels them as master question `i+1`.
-- `DE` and the option statistics are computed per *master* question via the mapping.
-- With shuffled question order, the rows mix questions.
+**P2 (medium): fixed on `new-feat`, to be released as 1.8.1.** Comprehensive item statistics used to be computed per *version position*.
+- **The bug:** `p_i`, `D_i` and `r_pb` were computed per version position but labelled as master questions, while `DE` and the option statistics were per master question. With shuffled question order the rows mixed questions, so the decisions and KR-20 were wrong. KR-20 could be off in either direction.
+- **The fix:** `projectToMasterOrder()` in `lib/excel-utils.ts` puts every answer in master order before the analysis. It works on copies and keeps the row order, the version letters and the option permutations.
+- **Checks first:** it refuses to compute, with a clear error, when:
+  - the map is not one-to-one for a version that has students;
+  - a mapped question lacks a permutation or a correct letter;
+  - versions disagree on a question's master key;
+  - a student appears twice in a version;
+  - a version has no solution row.
+- **What changed and what didn't:** grades, cross-version analysis, `DE` and the option statistics are unchanged. The per-question statistics, decisions and KR-20 change.
+- **Tests:** in `tests/analysis.test.ts` (hand-checked) and `tests/dummy-data.test.ts`, against the oracle, which now includes `rpb` and either key.
+- **Review:** channel 004.
+
+**Found in the P2 review (channel 004): pre-existing, open, not part of 1.8.1**
+- **P6 (medium):** `DE` and the option statistics take the correct answer from the map's single `correct` letter, not from the working key. A second accepted answer, or a key corrected in Step 2, is counted as a distractor.
+- **P7 (low):** `DE` always assumes 4 distractors, even for questions with fewer options.
+- **P8 (low):** KR-20 is undefined for an exam with one question: it comes out as NaN or Infinity, and the UI and export print it unguarded.
+- **P9 (low):** option `r_pb` uses the full total score, although a code comment says "rest score". The two definitions need to be stated.
+- **P10 (low):** the quartiles (T1–T4) and the 27% groups used for D have different tie rules. This is by design; it needs documenting.
+- **P11 (medium, next):** uploading a new student file in Step 1 keeps the previously accepted item-analysis file (`updateStudentData` does not clear it), and that file is not checked again.
 
 **P3 (low): WIDE detection reads column names from the first data row only.**
 - SheetJS omits blank cells, so a file whose first row has an empty `Master_Correct` is detected as UNKNOWN.
@@ -803,7 +819,7 @@ All of these predate the upgrade and were found while writing tests or reviewing
 - `expectedResults` is an **independent oracle**: it never calls `lib/excel-utils.ts`.
 - **CLI:** `scripts/generate-dummy-data.ts`, run as `npm run gen:dummy` (tsx). Output goes to `dummy_data/` (gitignored). `--from-shuffler <Question Map>` validates the map, rebuilds the exam and simulates students only.
 - **Templates:** the four download buttons use `TEMPLATE_PRESET`, one clean dataset, so the templates agree.
-- **Tests:** `tests/dummy-data.test.ts` covers every form through the real import path, oracle agreement, planted-item flags on identity question order, a P2 `it.fails` marker, and Shuffler-mode validation.
+- **Tests:** `tests/dummy-data.test.ts` covers every form through the real import path, oracle agreement (p, D, r_pb and KR-20, on identity and shuffled order, with the published and the corrected key), planted-item flags, and Shuffler-mode validation.
 - **Seed check (20 seeds, N=200, K=20, V=4):** KR-20 0.70–0.78.
   - Miskey: INVESTIGATE 19/20.
   - Dead distractors: REVISE 20/20.

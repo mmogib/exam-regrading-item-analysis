@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Comprehensive analysis:** difficulty (p), discrimination (D) and point-biserial (r_pb) are now computed for each master question. Previously they were computed per question position in each version, so when versions shuffled the question order, each row mixed different questions.
+  - Re-run any comprehensive report made with an earlier version where the versions' question orders differ.
+  - Per-question statistics, KEEP/REVISE/INVESTIGATE decisions and KR-20 may change, and KR-20 can go up or down.
+  - Grades, cross-version analysis, distractor efficiency and option statistics are not affected.
+- The comprehensive analysis now stops with a clear error instead of producing a wrong report when:
+  - the item analysis file does not map every question one-to-one for each version;
+  - a question lacks its option permutation or correct answer;
+  - versions disagree on a question's key;
+  - a student appears twice in one version.
+
 ### To Consider
 - Template download buttons in wizard steps
 - Help tooltips or info buttons per step

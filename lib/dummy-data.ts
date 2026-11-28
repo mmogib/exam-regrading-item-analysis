@@ -14,7 +14,7 @@
  */
 import * as XLSX from "xlsx";
 
-export const GENERATOR_VERSION = "1";
+export const GENERATOR_VERSION = "2";
 export const POINTS_PER_QUESTION = 5; // the app's uniform default (types/exam.ts)
 
 export type Letter = "A" | "B" | "C" | "D" | "E";
@@ -557,10 +557,14 @@ export interface ExpectedResults {
     /** App convention for cross-version averages: blanks are left out of the denominator. */
     percentExcludingBlanks: number;
     percentBlankAsWrong: number;
-    /** Reference item statistics in master coordinates (published key). */
+    /** Reference item statistics in master coordinates, scored with `itemStatisticsKey`. */
     p: number;
     D: number;
+    /** Pearson correlation of correct (0/1) with the rest score (items correct minus this item); 0 when either is constant. */
+    rpb: number;
   }[];
+  /** Key used for masterQuestions p/D/rpb, versionAverages and reliability. */
+  itemStatisticsKey: KeyKind;
   versionAverages: { code: string; percentExcludingBlanks: number }[];
   reliability: { KR20: number };
   planted: { kind: PlantKind; master: number; trueAnswers: Letter[]; publishedKey: Letter[]; correctedKey: Letter[]; p: number; D: number; expectedSignal: string }[];
@@ -574,7 +578,7 @@ const PLANT_SIGNAL: Record<PlantKind, string> = {
   "low-discrimination": "Discrimination near zero: typically REVISE for weak discrimination (sign may vary with the seed).",
 };
 
-export function expectedResults(ds: DummyDataset): ExpectedResults {
+export function expectedResults(ds: DummyDataset, statsKey: KeyKind = "published"): ExpectedResults {
   const { exam, students } = ds;
   const K = exam.params.questions;
   const isCorrect = (s: DummyStudent, m: number, key: KeyKind) => {
@@ -594,18 +598,39 @@ export function expectedResults(ds: DummyDataset): ExpectedResults {
     });
 
   const published = grade("published");
-  const itemsCorrect = published.map((g) => g.Tot / POINTS_PER_QUESTION);
+  const scored = statsKey === "published" ? published : grade(statsKey);
+  const itemsCorrect = scored.map((g) => g.Tot / POINTS_PER_QUESTION);
 
   // Upper/lower 27% groups by total score (stable order on ties), as the app does
   const ranked = students.map((s, i) => ({ s, t: itemsCorrect[i] })).sort((a, b) => b.t - a.t);
   const cut = Math.ceil(students.length * 0.27);
   const upper = ranked.slice(0, cut).map((x) => x.s);
   const lower = ranked.slice(-cut).map((x) => x.s);
-  const share = (group: DummyStudent[], m: number) => group.filter((s) => isCorrect(s, m, "published")).length / group.length;
+  const share = (group: DummyStudent[], m: number) => group.filter((s) => isCorrect(s, m, statsKey)).length / group.length;
+
+  // Point-biserial as a plain Pearson correlation of 0/1 correctness with the rest score
+  const pearson = (xs: number[], ys: number[]) => {
+    const n = xs.length;
+    const mx = xs.reduce((a, b) => a + b, 0) / n;
+    const my = ys.reduce((a, b) => a + b, 0) / n;
+    let sxy = 0;
+    let sxx = 0;
+    let syy = 0;
+    for (let i = 0; i < n; i++) {
+      sxy += (xs[i] - mx) * (ys[i] - my);
+      sxx += (xs[i] - mx) ** 2;
+      syy += (ys[i] - my) ** 2;
+    }
+    return sxx === 0 || syy === 0 ? 0 : sxy / Math.sqrt(sxx * syy);
+  };
+  const restCorrelation = (m: number) => {
+    const xs = students.map((s) => (isCorrect(s, m, statsKey) ? 1 : 0));
+    return pearson(xs, xs.map((x, i) => itemsCorrect[i] - x));
+  };
 
   const masterQuestions = exam.questions.map((q) => {
     const answered = students.filter((s) => s.responses[q.master - 1] !== "").length;
-    const correct = students.filter((s) => isCorrect(s, q.master, "published")).length;
+    const correct = students.filter((s) => isCorrect(s, q.master, statsKey)).length;
     return {
       master: q.master,
       answered,
@@ -615,6 +640,7 @@ export function expectedResults(ds: DummyDataset): ExpectedResults {
       percentBlankAsWrong: round2((100 * correct) / students.length),
       p: correct / students.length,
       D: share(upper, q.master) - share(lower, q.master),
+      rpb: restCorrelation(q.master),
     };
   });
 
@@ -626,7 +652,7 @@ export function expectedResults(ds: DummyDataset): ExpectedResults {
       for (let m = 1; m <= K; m++) {
         if (s.responses[m - 1] === "") continue;
         answered++;
-        if (isCorrect(s, m, "published")) correct++;
+        if (isCorrect(s, m, statsKey)) correct++;
       }
     }
     return { code: v.studentCode, percentExcludingBlanks: answered ? round2((100 * correct) / answered) : 0 };
@@ -649,6 +675,7 @@ export function expectedResults(ds: DummyDataset): ExpectedResults {
     })),
     grades: { published, corrected: grade("corrected") },
     masterQuestions,
+    itemStatisticsKey: statsKey,
     versionAverages,
     reliability: { KR20 },
     planted: exam.questions
@@ -821,7 +848,7 @@ function bundleReadme(ds: DummyDataset, expected: ExpectedResults, files: Bundle
   lines.push(
     "- Expected results are computed by the generator from the simulated answers. They do not reuse the app's code.",
     "- Cross-version percentages leave blanks out of the denominator, as the app does. `percentBlankAsWrong` in `expected_results.json` counts blanks as wrong.",
-    "- Known app limitation (P2): comprehensive difficulty, discrimination and point-biserial are computed per version position. With shuffled question order they mix questions. The reference `p` and `D` are per master question.",
+    "- The reference `p`, `D` and `rpb` are per master question, as the app computes them from v1.8.1. Earlier versions computed them per version position (P2), which mixes questions when the order is shuffled.",
     ""
   );
   return lines.join("\n");

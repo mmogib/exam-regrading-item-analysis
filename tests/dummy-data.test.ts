@@ -180,21 +180,29 @@ describe("Step 4: analyses agree with the independent oracle", () => {
     );
   });
 
-  // Identity question order (options still shuffled): comprehensive labels are master questions, so P2 does not apply
+  // Identity question order (options still shuffled): a control for the shuffled tests below
   const identityParams: DummyParams = { ...params, students: 400, shuffleQuestions: false, seed: 11 };
   const identity = buildDataset(identityParams);
   const identityExpected = expectedResults(identity);
 
-  it("comprehensive p, D and KR-20 match the oracle on identity question order", async () => {
+  const expectMatchesOracle = (
+    app: ReturnType<typeof computeComprehensiveItemAnalysis>,
+    oracle: ReturnType<typeof expectedResults>
+  ) => {
+    app.itemStatistics.forEach((s, i) => {
+      expect(s.questionNumber).toBe(oracle.masterQuestions[i].master);
+      expect(s.p_i).toBeCloseTo(oracle.masterQuestions[i].p, 10);
+      expect(s.D_i).toBeCloseTo(oracle.masterQuestions[i].D, 10);
+      expect(s.r_pb).toBeCloseTo(oracle.masterQuestions[i].rpb, 10);
+    });
+    expect(app.testSummary.KR20).toBeCloseTo(oracle.reliability.KR20, 10);
+  };
+
+  it("comprehensive p, D, r_pb and KR-20 match the oracle on identity question order", async () => {
     const b = buildBundle(identity);
     const exam = await importStudents(b.find((f) => f.name === "student_data.csv")!);
     const { rows } = await importItemAnalysis(b.find((f) => f.name === "item_analysis_question-map.csv")!, exam);
-    const app = computeComprehensiveItemAnalysis(exam, rows, identityParams.questions);
-    app.itemStatistics.forEach((s, i) => {
-      expect(s.p_i).toBeCloseTo(identityExpected.masterQuestions[i].p, 10);
-      expect(s.D_i).toBeCloseTo(identityExpected.masterQuestions[i].D, 10);
-    });
-    expect(app.testSummary.KR20).toBeCloseTo(identityExpected.reliability.KR20, 10);
+    expectMatchesOracle(computeComprehensiveItemAnalysis(exam, rows, identityParams.questions), identityExpected);
   });
 
   it("flags the planted questions (fixed seed, identity order)", async () => {
@@ -213,14 +221,29 @@ describe("Step 4: analyses agree with the independent oracle", () => {
     expect(Math.abs(item("low-discrimination").D_i)).toBeLessThan(0.2);
   });
 
-  // KNOWN ISSUE P2 (CLAUDE.MD Known Issues): with shuffled question order the
-  // comprehensive per-item stats are per version position, not per master question.
-  // `it.fails` passes while the bug exists; once fixed, make this a normal test.
-  it.fails("KNOWN ISSUE P2: comprehensive p matches the oracle when question order is shuffled", async () => {
+  // P2 (fixed in 1.8.1): with shuffled question order the comprehensive item
+  // statistics are per master question, not per version position.
+  it("P2: comprehensive p, D, r_pb and KR-20 match the oracle when question order is shuffled", async () => {
     const exam = await importStudents(file("student_data.csv"));
     const { rows } = await importItemAnalysis(file("item_analysis_question-map.csv"), exam);
-    const app = computeComprehensiveItemAnalysis(exam, rows, params.questions);
-    app.itemStatistics.forEach((s, i) => expect(s.p_i).toBeCloseTo(expected.masterQuestions[i].p, 10));
+    expectMatchesOracle(computeComprehensiveItemAnalysis(exam, rows, params.questions), expected);
+  });
+
+  it("P2: with the corrected key (after Step 2), shuffled order matches the corrected-key oracle", async () => {
+    const exam = await importStudents(file("student_data_corrected-key.csv"));
+    const { rows } = await importItemAnalysis(file("item_analysis_question-map_true-key.csv"), exam);
+    expect(validateCorrectAnswers(rows, exam)).toBeNull();
+    const oracle = expectedResults(ds, "corrected");
+    expect(oracle.itemStatisticsKey).toBe("corrected");
+    expectMatchesOracle(computeComprehensiveItemAnalysis(exam, rows, params.questions), oracle);
+  });
+
+  it("P2: the planted miskey is flagged under shuffled order (fixed seed)", async () => {
+    const exam = await importStudents(file("student_data.csv"));
+    const { rows } = await importItemAnalysis(file("item_analysis_question-map.csv"), exam);
+    const items = computeComprehensiveItemAnalysis(exam, rows, params.questions).itemStatistics;
+    const miskey = expected.planted.find((p) => p.kind === "miskey")!;
+    expect(items[miskey.master - 1].decision).toBe("INVESTIGATE");
   });
 });
 

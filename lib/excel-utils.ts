@@ -2433,15 +2433,130 @@ function computeOptionStatistics(
 }
 
 /**
- * Main orchestrator: Compute comprehensive item analysis
- * This is the main exported function that the UI will call
+ * Put every answer in MASTER question order before the comprehensive analysis
+ * (fix for P2: item statistics used to be computed per version position).
+ *
+ * First checks that, for every version that has students, the item-analysis
+ * rows map master questions 1..K one-to-one onto positions 1..K, each with a
+ * valid option permutation and correct letter, and that the versions agree on
+ * each question's master key. Throws a clear error otherwise, rather than
+ * producing a partial or mixed report.
+ *
+ * Returns copies (the inputs are not modified; row order is kept):
+ * - rows: in each mapped version, column "m" holds the answer to master
+ *   question m. Solution rows are reordered the same way and keep their full
+ *   accepted-answer cell. Answer letters stay version letters.
+ * - mappings: order := order_in_master. Option permutations are unchanged.
  */
-export function computeComprehensiveItemAnalysis(
+function projectToMasterOrder(
   answersData: ExamRow[],
   itemAnalysisData: ItemAnalysisRow[],
+  K: number
+): { rows: ExamRow[]; mappings: ItemAnalysisRow[] } {
+  const fail = (message: string): never => {
+    throw new Error(`Comprehensive analysis cannot run: ${message}`);
+  };
+  const codeOf = (value: unknown) => String(value ?? "").trim();
+  const LETTERS = "ABCDE";
+
+  const studentRows = answersData.filter((row) => !isSolutionRow(row));
+  const solutionRows = answersData.filter((row) => isSolutionRow(row));
+
+  // The per-item helpers look students up by (ID, Code), so each pair must be unique
+  const seen = new Set<string>();
+  for (const row of studentRows) {
+    const key = `${codeOf(row.Code)}\u0000${codeOf(row.ID)}`;
+    if (seen.has(key)) {
+      fail(`student ID "${codeOf(row.ID)}" appears more than once in version ${codeOf(row.Code)}.`);
+    }
+    seen.add(key);
+  }
+
+  const activeCodes = Array.from(new Set(studentRows.map((row) => codeOf(row.Code))));
+  const positionsByCode = new Map<string, Map<number, number>>(); // code -> master -> position
+  const masterKey = new Map<number, { letter: string; code: string }>();
+
+  for (const code of activeCodes) {
+    const solution = solutionRows.find((row) => codeOf(row.Code) === code);
+    if (!solution) fail(`version ${code} has students but no solution row.`);
+
+    const entries = itemAnalysisData.filter((ia) => codeOf(ia.code) === code);
+    if (entries.length === 0) fail(`the item analysis file has no entries for version ${code}.`);
+
+    const byMaster = new Map<number, number>();
+    const byPosition = new Map<number, number>();
+    for (const ia of entries) {
+      const master = Number(ia.order_in_master);
+      const position = Number(ia.order);
+      if (!Number.isInteger(master) || master < 1 || master > K) {
+        fail(`version ${code}: master question "${ia.order_in_master}" is not a whole number from 1 to ${K}.`);
+      }
+      if (!Number.isInteger(position) || position < 1 || position > K) {
+        fail(`version ${code}, master Q${master}: position "${ia.order}" is not a whole number from 1 to ${K}.`);
+      }
+      if (byMaster.has(master)) fail(`version ${code}: master Q${master} is listed more than once.`);
+      if (byPosition.has(position)) {
+        fail(`version ${code}: position ${position} is given to both master Q${byPosition.get(position)} and master Q${master}.`);
+      }
+      byMaster.set(master, position);
+      byPosition.set(position, master);
+
+      const perm = String(ia.permutation ?? "").trim().toUpperCase();
+      const n = perm.length;
+      if (n < 2 || n > 5 || perm.split("").sort().join("") !== LETTERS.slice(0, n)) {
+        fail(`version ${code}, master Q${master}: the option permutation "${ia.permutation ?? ""}" is missing or invalid.`);
+      }
+      const correct = String(ia.correct ?? "").trim().toUpperCase();
+      const index = LETTERS.indexOf(correct);
+      if (correct.length !== 1 || index < 0 || index >= n) {
+        fail(`version ${code}, master Q${master}: the correct answer "${ia.correct ?? ""}" is missing or not one of its ${n} options.`);
+      }
+      const letter = perm[index];
+      const known = masterKey.get(master);
+      if (known && known.letter !== letter) {
+        fail(`master Q${master}: versions ${known.code} and ${code} give different correct answers (master options ${known.letter} and ${letter}).`);
+      }
+      masterKey.set(master, { letter, code });
+    }
+
+    for (let m = 1; m <= K; m++) {
+      if (!byMaster.has(m)) fail(`version ${code} has no position for master Q${m}.`);
+      if (solution![String(byMaster.get(m))] === undefined) {
+        fail(`version ${code}: the student file has no question column ${byMaster.get(m)}.`);
+      }
+    }
+    positionsByCode.set(code, byMaster);
+  }
+
+  const rows = answersData.map((row) => {
+    const out: ExamRow = { ...row };
+    const byMaster = positionsByCode.get(codeOf(row.Code));
+    if (byMaster) {
+      for (let m = 1; m <= K; m++) out[String(m)] = row[String(byMaster.get(m))];
+    }
+    return out;
+  });
+  const mappings = itemAnalysisData.map((ia) => ({ ...ia, order: ia.order_in_master }));
+  return { rows, mappings };
+}
+
+/**
+ * Main orchestrator: Compute comprehensive item analysis
+ * This is the main exported function that the UI will call.
+ * All item statistics are per MASTER question (see projectToMasterOrder).
+ */
+export function computeComprehensiveItemAnalysis(
+  originalAnswersData: ExamRow[],
+  originalItemAnalysisData: ItemAnalysisRow[],
   numQuestions: number
 ): import("@/types/exam").ComprehensiveItemAnalysisResult {
-  // Get question columns and correct answers map
+  const { rows: answersData, mappings: itemAnalysisData } = projectToMasterOrder(
+    originalAnswersData,
+    originalItemAnalysisData,
+    numQuestions
+  );
+
+  // Get question columns and correct answers map (now in master order)
   const qCols = getAllQuestionCols(answersData).slice(0, numQuestions);
   const correctMap = buildCorrectAnswersMap(answersData, qCols);
 
