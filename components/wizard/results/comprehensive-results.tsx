@@ -67,6 +67,8 @@ export function ComprehensiveResults({ results, onDownload }: ComprehensiveResul
       const bValue = b[sortConfig.key];
 
       if (aValue === undefined || bValue === undefined) return 0;
+      // N/A values (DE with no distractors) always go last, in both directions
+      if (aValue === null || bValue === null) return aValue === bValue ? 0 : aValue === null ? 1 : -1;
 
       if (typeof aValue === 'number' && typeof bValue === 'number') {
         return sortConfig.direction === 'asc' ? aValue - bValue : bValue - aValue;
@@ -135,14 +137,14 @@ export function ComprehensiveResults({ results, onDownload }: ComprehensiveResul
                     <div className="space-y-2">
                       <div>
                         <span className="font-semibold">Point-Biserial (r_pb):</span>
-                        <p className="text-muted-foreground">Correlation with total score.</p>
+                        <p className="text-muted-foreground">Correlation between answering correctly and the rest score (the total without this question).</p>
                         <p className="text-xs text-muted-foreground mt-1">
                           Ideal: ≥0.20 | Negative = Possible wrong answer key
                         </p>
                       </div>
                       <div>
                         <span className="font-semibold">Distractor Efficiency (DE):</span>
-                        <p className="text-muted-foreground">% of distractors selected by ≥5% of students.</p>
+                        <p className="text-muted-foreground">% of distractors (options the key does not accept) selected by ≥5% of all students. N/A when every option is accepted.</p>
                         <p className="text-xs text-muted-foreground mt-1">
                           Ideal: ≥75% | Low = Weak distractors (too obvious)
                         </p>
@@ -356,7 +358,9 @@ export function ComprehensiveResults({ results, onDownload }: ComprehensiveResul
             <br />
             <strong>D (Discrimination Index):</strong> Difference between top 27% and bottom 27% performance. Positive = good item.
             <br />
-            <strong>DE (Distractor Efficiency):</strong> Percentage of wrong answer choices that attract at least 5% of students. Higher = distractors are working.
+            <strong>DE (Distractor Efficiency):</strong> Percentage of wrong answer choices that attract at least 5% of students. Higher = distractors are working. N/A when every option is accepted.
+            <br />
+            <strong>T1–T4:</strong> score groups from the top (T1) to the bottom (T4), nominally a quarter each. Students with the same total are always in the same group (a tie goes to the higher group), so groups can be unequal or empty.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -467,7 +471,7 @@ export function ComprehensiveResults({ results, onDownload }: ComprehensiveResul
                         </span>
                       </TooltipTrigger>
                       <TooltipContent>
-                        <p className="max-w-xs">Point-biserial: Correlation with total score (≥0.20 ideal)</p>
+                        <p className="max-w-xs">Point-biserial: correlation with the rest score, the total without this question (≥0.20 ideal)</p>
                       </TooltipContent>
                     </Tooltip>
                   </TableHead>
@@ -479,7 +483,7 @@ export function ComprehensiveResults({ results, onDownload }: ComprehensiveResul
                         </span>
                       </TooltipTrigger>
                       <TooltipContent>
-                        <p className="max-w-xs">Distractor Efficiency: % functional distractors (≥75% ideal)</p>
+                        <p className="max-w-xs">Distractor Efficiency: % functional distractors (≥75% ideal); N/A when every option is accepted</p>
                       </TooltipContent>
                     </Tooltip>
                   </TableHead>
@@ -508,9 +512,13 @@ export function ComprehensiveResults({ results, onDownload }: ComprehensiveResul
                       </span>
                     </TableCell>
                     <TableCell className="text-right">
-                      <span className={item.DE < 50 ? 'text-red-600 dark:text-red-400 font-semibold' : item.DE < 75 ? 'text-yellow-600 dark:text-yellow-400 font-semibold' : ''}>
-                        {item.DE.toFixed(1)}%
-                      </span>
+                      {item.DE === null ? (
+                        <span className="text-muted-foreground" title="No distractors: every option is accepted">N/A</span>
+                      ) : (
+                        <span className={item.DE < 50 ? 'text-red-600 dark:text-red-400 font-semibold' : item.DE < 75 ? 'text-yellow-600 dark:text-yellow-400 font-semibold' : ''}>
+                          {item.DE.toFixed(1)}%
+                        </span>
+                      )}
                     </TableCell>
                     <TableCell>
                       <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full ${getDecisionColor(item.decision)}`}>
@@ -579,10 +587,10 @@ export function ComprehensiveResults({ results, onDownload }: ComprehensiveResul
                             <TableHead className="text-right font-bold">p_ij (%)</TableHead>
                             <TableHead className="text-right font-bold">D_ij</TableHead>
                             <TableHead className="text-right font-bold">r_pb</TableHead>
-                            <TableHead className="text-right font-bold">T1 (Top 25%)</TableHead>
+                            <TableHead className="text-right font-bold">T1 (Top)</TableHead>
                             <TableHead className="text-right font-bold">T2</TableHead>
                             <TableHead className="text-right font-bold">T3</TableHead>
-                            <TableHead className="text-right font-bold">T4 (Bottom 25%)</TableHead>
+                            <TableHead className="text-right font-bold">T4 (Bottom)</TableHead>
                             <TableHead className="font-bold">Status</TableHead>
                           </TableRow>
                         </TableHeader>

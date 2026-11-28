@@ -15,6 +15,7 @@
  * Design and review: references/TEMPLATE_DIALOG_FEATURE.md (channel 005).
  */
 import * as XLSX from "xlsx";
+import { bindVersionCodes, findVersionPairs, normalizeVersionCode } from "./excel-utils";
 import {
   buildDataset,
   createRng,
@@ -184,16 +185,12 @@ const sortCodes = (codes: string[]) => [...codes].sort((a, b) => Number(a) - Num
 const isWholeNumber = (v: string) => /^\d+$/.test(v.trim());
 
 /**
- * The code Step 3 sees for a version label. This mirrors normalizeItemAnalysis
- * in lib/excel-utils.ts exactly, including its radix-less parseInt: a label
- * starting with digits is read as that number ("001" and "1A" are both 1, and
- * "0x1" is 1 too).
+ * The code Step 3 stores for a version label: the shared normalizeVersionCode
+ * rule (lib/excel-utils.ts, P12). An all-digit label is a number (001 -> 1);
+ * any other label stays its text ("1A", "0x1", "1e2"). An all-digit label too
+ * long to be an exact number throws.
  */
-export const step3Code = (code: string) => {
-  // No radix on purpose: it must match Step 3's conversion exactly
-  const n = parseInt(String(code));
-  return Number.isNaN(n) ? String(code).trim() : String(n);
-};
+export const step3Code = (code: string) => String(normalizeVersionCode(code));
 
 /** Grading-center version code for a source code: numeric codes are padded to 3 digits (1 -> 001). */
 export const gradingCenterCode = (sourceCode: string) => (isWholeNumber(sourceCode) ? sourceCode.trim().padStart(3, "0") : sourceCode.trim());
@@ -267,29 +264,12 @@ function readOptionsMatrix(headers: string[], body: string[][]): ShufflerExam {
     throw new Error("The Options Matrix repeats a column name.");
   }
 
-  // Version column pairs: <name>_Q and <name>_Opt, each half required
-  const halves = (suffix: "Q" | "Opt") => {
-    const found = new Map<string, { name: string; header: string; index: number }>();
-    names.forEach((h, index) => {
-      const m = new RegExp(`^(.+)_${suffix}$`, "i").exec(h);
-      if (m) found.set(m[1].toLowerCase(), { name: m[1], header: h, index });
-    });
-    return found;
-  };
-  const qCols = halves("Q");
-  const optCols = halves("Opt");
-  for (const [key, q] of qCols) {
-    if (!optCols.has(key)) throw new Error(`The Options Matrix has "${q.header}" but no "${q.name}_Opt" column.`);
-  }
-  for (const [key, o] of optCols) {
-    if (!qCols.has(key)) throw new Error(`The Options Matrix has "${o.header}" but no "${o.name}_Q" column.`);
-  }
-  const pairs = [...qCols.entries()].map(([key, q]) => {
-    const numbered = /^version_(\d+)$/i.exec(q.name);
-    return { code: numbered ? numbered[1] : q.name, numbered: !!numbered, q: q.index, opt: optCols.get(key)!.index };
-  });
-  if (pairs.length === 0) throw new Error("The Options Matrix has no <version>_Q / <version>_Opt column pairs.");
-  if (new Set(pairs.map((p) => p.code)).size !== pairs.length) throw new Error("The Options Matrix names a version twice.");
+  // Version column pairs, by the same rule as Step 3 (findVersionPairs): all
+  // legacy-named (version_N_Q, vN_Opt, ...) -> numeric codes; otherwise every
+  // name as written. Both halves are required; versions may not repeat.
+  const versionPairs = findVersionPairs(names);
+  if (!versionPairs) throw new Error("The Options Matrix has no <version>_Q / <version>_Opt column pairs.");
+  const pairs = versionPairs.pairs.map((p) => ({ code: p.code, q: names.indexOf(p.qCol), opt: names.indexOf(p.optCol) }));
 
   // Group option rows by master question
   const byMaster = new Map<number, string[][]>();
@@ -337,18 +317,12 @@ function readOptionsMatrix(headers: string[], body: string[][]): ShufflerExam {
       entries.push({ code: p.code, position, master, permutation: perm.join(""), correct: correct! });
     }
   }
-  // What stops Step 3 from reading this file unchanged: P5, its own version-number check, P3
+  // What stops Step 3 from reading this file unchanged. Since 1.9.1 Step 3 reads
+  // named versions (P5) and blank first-row cells (P3); it still requires
+  // consecutive numbers for legacy version_N names.
   const step3Issues: string[] = [];
-  if (pairs.some((p) => !p.numbered)) {
-    step3Issues.push("its version columns are not named version_1, version_2, ...");
-  } else {
-    const nums = pairs.map((p) => Number(p.code)).sort((a, b) => a - b);
-    if (nums.some((v, i) => i > 0 && v !== nums[i - 1] + 1)) step3Issues.push("its version numbers are not consecutive");
-  }
-  // Step 3 takes the column names from the first data row, so a required column left empty there is lost
-  const required = [cQ, cOption, cFlag, ...pairs.flatMap((p) => [p.q, p.opt])];
-  if (required.some((i) => (body[0]?.[i] ?? "").trim() === "")) {
-    step3Issues.push("a required column is empty in its first data row, and Step 3 takes the column names from that row");
+  if (versionPairs.mode === "legacy" && !versionPairs.consecutive) {
+    step3Issues.push("its version numbers are not consecutive");
   }
 
   return {
@@ -378,11 +352,11 @@ function validateShufflerExam(exam: ShufflerExam) {
     const gc = gradingCenterCode(code);
     if (gcCodes.has(gc)) throw new Error(`Versions "${code}" and another version both become code ${gc}.`);
     gcCodes.add(gc);
-    // Step 3 reads a label starting with digits as that number, so such labels must stay distinct
+    // Step 3 reads all-digit labels as numbers, so such labels must stay distinct
     const seen = step3Codes.get(step3Code(code));
     if (seen !== undefined) {
       throw new Error(
-        `Versions "${seen}" and "${code}" would both be read as ${step3Code(code)} in Step 3, which reads version codes that start with digits as numbers. Rename them, for example 1 and 2, or A and B.`
+        `Versions "${seen}" and "${code}" would both be read as ${step3Code(code)} in Step 3, which reads all-digit version codes as numbers. Rename them, for example 1 and 2, or A and B.`
       );
     }
     step3Codes.set(step3Code(code), code);
@@ -540,6 +514,16 @@ export function buildGradingCenterSnapshot(settings: GradingCenterSettings, sour
     ...(corrected ? { afterCorrectingTheKey: { masterQuestions: corrected.masterQuestions, reliability: corrected.reliability } } : {}),
   };
 
+  // How Step 3 will bind a companion's codes to the student file's codes
+  const studentCodes = exam.versions.map((v) => v.studentCode);
+  const bindingNote = (itemCodes: string[]) => {
+    const kind = bindVersionCodes(studentCodes, itemCodes.map((c) => step3Code(c))).kind;
+    return kind === "exact"
+      ? ""
+      : kind === "numeric"
+        ? " Step 3 matches its codes to the student file's by number by itself."
+        : " Accept the suggested code mapping in Step 3.";
+  };
   const miskeyNote = shuffler && settings.plantMiskey
     ? " The student file has a planted wrong key: Step 3 rejects it until you correct that question in Step 2."
     : "";
@@ -557,8 +541,8 @@ export function buildGradingCenterSnapshot(settings: GradingCenterSettings, sour
       name: `${stem}_question_map.csv`,
       label: "Matching Question Map (.csv)",
       description: shuffler
-        ? `Your exam's map with codes ${exam.versions.map((v) => v.studentCode).join(", ")}. Upload it in Step 3 and accept the suggested code mapping.${miskeyNote}`
-        : "Upload in Step 3 for the full analysis; accept the suggested code mapping.",
+        ? `Your exam's map with codes ${studentCodes.join(", ")}. Upload it in Step 3.${bindingNote(exam.versions.map((v) => v.itemCode))}${miskeyNote}`
+        : `Upload in Step 3 for the full analysis.${bindingNote(exam.versions.map((v) => v.itemCode))}`,
       mime: CSV_MIME,
       content: toDelimited(questionMapTable(exam, shuffler ? "corrected" : "published")),
     },
@@ -569,7 +553,7 @@ export function buildGradingCenterSnapshot(settings: GradingCenterSettings, sour
         kind: "options-matrix",
         name: `${stem}_options_matrix.csv`,
         label: "Matching Options Matrix (.csv)",
-        description: "Alternative for Step 3 (versions named version_1, version_2, ...); accept the suggested code mapping.",
+        description: `Alternative for Step 3 (versions named version_1, version_2, ...).${bindingNote(exam.versions.map((v) => String(v.index)))}`,
         mime: CSV_MIME,
         content: toDelimited(optionsMatrixTable(exam)),
       },

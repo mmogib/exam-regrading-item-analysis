@@ -30,7 +30,7 @@ See `README.md` for installation and setup instructions.
 - **Browser check:** the user checked the live v1.8.0 site on 2026-11-28; all good.
 - **Tags:** `v1.7.0`, `v1.7.1`, `v1.8.0`, `v1.8.1`, `v1.9.0` (annotated, pushed).
 - **1.9.0:** the Download Template dialog (channels 005, 007 and 008; `references/TEMPLATE_DIALOG_FEATURE.md`). The user tested it in the browser, including Excel, focus, Escape and a narrow window.
-- **Next:** release 1.9.1: P11 (done on `new-feat`), the wording fixes (done), and the batch P3, P5–P10, P12 (plans in channel 010).
+- **Next:** release 1.9.1: P11, the wording fixes and the batch P3, P5–P10, P12 are done on `new-feat`; re-verification in channel 011.
 - **Branches:** `new-feat` is the single development branch and `main` is the release branch. Releases fast-forward `main` to `new-feat`, so there are no merge commits.
 
 **Release procedure**
@@ -47,11 +47,8 @@ See `README.md` for installation and setup instructions.
 
 **Open issues** (details under "November 2026 Updates → Known Issues")
 - P2: fixed in 1.8.1 (channels 004 and 006).
-- P3: WIDE detection depends on the first row. It has an `it.fails` marker test.
-- P5: custom Shuffler version names in Options Matrix headers are not recognised.
-- P6–P10: older issues found in the P2 review (channel 004); planned for 1.9.1 (channel 010).
+- P3, P5–P10, P12: fixed on `new-feat`, for 1.9.1 (channel 010; `references/BATCH_1.9.1.md`).
 - P11: fixed on `new-feat`, for 1.9.1 (channel 009).
-- P12 (low): Step 3 reads numeric version codes as numbers, so padded codes always need the code-mapping screen.
 - Minor wording issues: fixed on `new-feat`, for 1.9.1.
 
 **Local-only data (gitignored)**
@@ -794,13 +791,18 @@ All of these predate the upgrade and were found while writing tests or reviewing
 - **Tests:** in `tests/analysis.test.ts` (hand-checked, including the guards, a single shuffled version, unequal versions and constant items), `tests/export-and-templates.test.ts` (shuffled export) and `tests/dummy-data.test.ts` (against the oracle, which now includes `rpb` and either key).
 - **Review:** channels 004 and 006.
 
-**Found in the P2 review (channel 004): pre-existing, open, not part of 1.8.1**
-- **P6 (medium):** `DE` and the option statistics take the correct answer from the map's single `correct` letter, not from the working key. A second accepted answer, or a key corrected in Step 2, is counted as a distractor.
-- **P7 (low):** `DE` always assumes 4 distractors, even for questions with fewer options.
-- **P8 (low):** KR-20 is undefined for an exam with one question: it comes out as NaN or Infinity, and the UI and export print it unguarded.
-- **P9 (low):** option `r_pb` uses the full total score, although a code comment says "rest score". The two definitions need to be stated.
-- **P10 (low):** the quartiles (T1–T4) and the 27% groups used for D have different tie rules. This is by design; it needs documenting.
-- **P12 (low):** Step 3 parses numeric version codes as numbers (`normalizeItemAnalysis`: `001` becomes `1`), so a map with padded codes always goes through the code-mapping screen, and its suggestion is correct. `validateCorrectAnswers` skips codes that have no solution row, so it must run after code mapping, which the UI does. Found while building the template dialog.
+**Found in the P2 review (channel 004): all fixed on `new-feat` for 1.9.1 (channel 010)**
+- **P6 (medium, fixed):** `DE` and the option statistics used the map's single `correct` letter. They now use the working accepted set from the solution rows (`projectToMasterOrder` returns `masters`). Versions must agree on each master's accepted set (master letters), or the comprehensive analysis stops. This replaces 1.8.1's scalar-key equality. The scalar `correct` must be one letter that the version's solution row accepts.
+- **P7 (low, fixed):** the option count n is the permutation length. `parseWideFormat` emits unpadded permutations and validates options A..n and the shuffles, so `DE` = functional distractors / (n − accepted) × 100, or `null` (N/A) with no distractors. The `ItemStatistics.DE` type is `number | null`, and the UI, export, sorting and decisions handle null. Option rows are A..n plus Blank/Other.
+- **P8 (low, fixed):** the comprehensive preflight requires K ≥ 2. `computeKR20` returns 0 for k < 2 as a defence only.
+- **P9 (low, fixed):** option `r_pb` correlates choosing the option with the item's rest score R = total − 5 × (item correct under the working key), the same R as the item `r_pb`. It returns 0 for constant vectors.
+- **P10 (low, fixed):** quartile groups use nominal cutoffs at ceil(25/50/75% × N). Each student takes the highest group whose cutoff score they reach, so tie blocks stay together and groups can be empty. The D groups stay fixed-size `ceil(0.27 N)` stable slices. Both rules are documented in the help and the Excel guide.
+- **P12 (low, fixed):**
+  - The CSV reader keeps cell text (`readCsvTable`, `raw: true`).
+  - `normalizeVersionCode` turns only all-digit codes into numbers, and refuses unsafe integers.
+  - Step 3 binds codes with `bindVersionCodes`: exact sets pass; a unique, complete all-digit match by number (1 = 001) is applied automatically, with a note; otherwise the mapping screen appears, with a deterministic suggestion (`sortVersionCodes`) and `Map`-based rebinding (`applyCodeBinding`).
+  - The template dialog's `step3Code` follows the same rule.
+  - `validateCorrectAnswers` still skips codes without a solution row, so binding happens first.
 - **P11 (medium): fixed on `new-feat`, for 1.9.1 (channel 009).** A new Step 1 upload used to keep the accepted item-analysis file and the Step 2 state, so Step 4 could analyse new students with another exam's map. Every successful Step 1 import, including identical rows, now clears Steps 2 and 3 and returns to Step 1 (`applyNewStudentData`).
   - Acceptance is bound to `studentRevision`, so a Step 3 check that finishes after the data changed is dropped, together with its Step 3 completion (`acceptItemAnalysis`, `acceptItemAnalysisTransition`).
   - Start Over keeps counting the revision up.
@@ -808,16 +810,14 @@ All of these predate the upgrade and were found while writing tests or reviewing
   - Saved sessions from older versions are migrated once (storage version 2, `migrateStoredState`): the student data are kept, the item analysis is dropped.
   - Tests: `tests/student-data-replacement.test.ts`.
 
-**P3 (low): WIDE detection reads column names from the first data row only.**
-- SheetJS omits blank cells, so a file whose first row has an empty `Master_Correct` is detected as UNKNOWN.
-- The Shuffler flags whichever master answer was configured. When that is option A, as in the sample exports, the first row is never blank.
-- Marked `it.fails` in `tests/item-analysis-parsing.test.ts`.
+**P3 (low): fixed for 1.9.1.** WIDE detection used to read the column names from the first data row, and SheetJS omits blank cells. `readCsvTable` now takes the columns from the header row, gives every row every column (`""`), and rejects repeated column names and files without data rows. The former `it.fails` marker is a normal test.
 
 **P4 (fixed in 1.7.1):** a key corrected in Step 2 used to be ignored by Steps 3 and 4. Re-grading now makes the revised data (with the corrected key) the working exam data, via `applyRegradedKey` in `contexts/wizard-context.tsx`. If the key changes after an item-analysis file was accepted, that file is cleared and must be re-uploaded, because it was validated against the old key. Tests: `tests/regrade.test.ts`.
 
-**P5 (low, open): custom Shuffler version names are not recognised in Options Matrix headers.**
-- The Shuffler writes `${versionName}_Q` / `${versionName}_Opt`.
-- With its default names (`version_N`) the files work. With custom names, such as `A_Q` in its own help example, the file is not detected as WIDE, and `parseWideFormat` needs numeric `version_N` / `vN` columns.
+**P5 (low): fixed for 1.9.1.** `findVersionPairs` is one rule for detection, parsing and the template dialog: complete `<name>_Q` / `<name>_Opt` pairs.
+- A file whose pairs are all legacy (`version_N`, `vN`, ...) gets numeric codes and the consecutive-number check.
+- Any other file keeps every name as written, including `version_1` in a mixed file.
+- Orphan halves and repeated versions are errors.
 
 **Minor wording (fixed on `new-feat`, for 1.9.1):**
 - The Step 1 mapping hint said solution rows have Code = "0" or "00". It now describes the documented format: ID 0 with the version's real code.

@@ -152,9 +152,12 @@ describe("comprehensive item analysis (single version, hand-checked)", () => {
     expect(q1[0].p_ij).toBe(0.75);
     expect(q1[0].D_ij).toBe(0.5);
     expect(q1[1].D_ij).toBe(-0.5);
-    // A chosen by {15,10,5}, not by {0}: (10 - 0) / sqrt(31.25) * sqrt(0.1875)
-    expect(q1[0].r_pb).toBeCloseTo(0.774597, 5);
-    expect(q1[1].r_pb).toBeCloseTo(-0.774597, 5);
+    // P9: against Q1's rest score R = total - 5 x (Q1 correct) = {10, 5, 0 | 0}, sd = sqrt(17.1875).
+    // A chosen by the first three: (5 - 0) / 4.14578 * sqrt(0.75 * 0.25) = 0.522233,
+    // which equals Q1's item r_pb (a single accepted answer)
+    expect(q1[0].r_pb).toBeCloseTo(0.522233, 5);
+    expect(q1[0].r_pb).toBeCloseTo(result.itemStatistics[0].r_pb, 10);
+    expect(q1[1].r_pb).toBeCloseTo(-0.522233, 5);
   });
 });
 
@@ -307,9 +310,10 @@ describe("comprehensive item analysis across versions (P2, hand-checked)", () =>
       expect(run(replace(5, { correct: undefined }))).toThrow(/version 002, master Q1: the correct answer "" is missing/);
       expect(run(replace(5, { permutation: "BCA", correct: "D" }))).toThrow(/not one of its 3 options/);
     });
-    it("versions that disagree on a master key", () => {
+    it("a correct letter the version's solution row does not accept", () => {
+      // 002's solution row accepts C at master Q1's position; the map says A
       expect(run(replace(5, { correct: "A" }))).toThrow(
-        /master Q1: versions 001 and 002 give different correct answers \(master options A and B\)/
+        /version 002, master Q1: the item analysis file's correct answer "A" is not accepted by the solution row \("C"\)/
       );
     });
     it("a student listed twice in one version", () => {

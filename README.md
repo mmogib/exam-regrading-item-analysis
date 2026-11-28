@@ -140,7 +140,7 @@ Step 1's **Download Template** button opens a dialog that generates a synthetic 
   - the matching Question Map for Step 3 (and, without a Shuffler file, the matching Options Matrix and Normal files);
   - with a Shuffler file, your uploaded file unchanged, for your records; use the generated matching Question Map for Step 3 (some originals need changes before Step 3 can use them);
   - the expected results (.json): grades and item statistics computed independently of the app, from the exported data.
-- **Version codes:** the generated files use 001, 002, ... for numeric Shuffler versions (1, 2, ...). Step 3 reads codes as numbers; when it offers code mapping, accept the suggested binding. The expected results record your file's original codes too.
+- **Version codes:** the generated files use 001, 002, ... for numeric Shuffler versions (1, 2, ...). Step 3 matches 1 to 001 (and so on) by itself; when it shows the code-mapping screen, accept the suggested binding. The expected results record your file's original codes too.
 
 ## Dummy Data for Testing and Demos
 

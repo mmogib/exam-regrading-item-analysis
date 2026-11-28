@@ -86,6 +86,15 @@ function expectComprehensiveMatchesOracle(rows: ExamRow[], map: ItemAnalysisRow[
     expect(s.p_i).toBeCloseTo(snap.expected.masterQuestions[i].p, 10);
     expect(s.D_i).toBeCloseTo(snap.expected.masterQuestions[i].D, 10);
     expect(s.r_pb).toBeCloseTo(snap.expected.masterQuestions[i].rpb, 10);
+    // 1.9.1: DE (N/A when no distractors) and every option row, including X marks as Blank/Other
+    const mq = snap.expected.masterQuestions[i];
+    if (mq.DE === null) expect(s.DE).toBeNull();
+    else expect(s.DE).toBeCloseTo(mq.DE, 10);
+    const options = app.optionStatistics.filter((o) => o.questionNumber === s.questionNumber);
+    expect(options.map((o) => [o.option, o.count, o.isCorrect, o.isFunctional, o.T1, o.T2, o.T3, o.T4])).toEqual(
+      mq.optionRows.map((o) => [o.option, o.count, o.isCorrect, o.isFunctional, ...o.T])
+    );
+    options.forEach((o, j) => expect(o.r_pb).toBeCloseTo(mq.optionRows[j].rpb, 10));
   });
   expect(app.testSummary.KR20).toBeCloseTo(snap.expected.reliability.KR20, 10);
 }
@@ -427,13 +436,20 @@ async function completeFlow(snap: GradingCenterSnapshot) {
 describe("version codes and Step 3", () => {
   const small = settings({ students: 30, plants: false });
 
-  it("rejects codes that Step 3 would read as the same number", () => {
-    expect(() => readShufflerFile(smallQuestionMap(["1A", "1B"]))).toThrow(/"1A" and "1B" would both be read as 1 in Step 3/);
-    expect(() => readShufflerFile(smallQuestionMap(["1", "1A"]))).toThrow(/would both be read as 1 in Step 3/);
+  it("rejects only codes that Step 3 would read as the same number (all-digit aliases), or too long", () => {
     expect(() => readShufflerFile(smallQuestionMap(["01", "1"]))).toThrow(/both become code 001/);
-    // Step 3's parseInt has no radix, so "0x1" is 1 and "0xA" is 10
-    expect(() => readShufflerFile(smallQuestionMap(["0x1", "1"]))).toThrow(/would both be read as 1 in Step 3/);
-    expect(() => readShufflerFile(smallQuestionMap(["0xA", "10"]))).toThrow(/would both be read as 10 in Step 3/);
+    expect(() => readShufflerFile(smallQuestionMap(["99999999999999999999", "1"]))).toThrow(/too long to use as a number/);
+    // Since 1.9.1 (P12) Step 3 keeps any label that is not all digits as text
+    for (const codes of [["1A", "1B"], ["1", "1A"], ["0x1", "1"], ["0xA", "10"], ["1e2", "100"]]) {
+      expect(readShufflerFile(smallQuestionMap(codes)).versions.length, codes.join("/")).toBe(2);
+    }
+  });
+
+  it("letter-led codes that used to collide now complete the flow (1A/1B, 1e2/100)", async () => {
+    for (const codes of [["1A", "1B"], ["1e2", "100"]]) {
+      const snap = buildGradingCenterSnapshot(small, { fileName: "map.csv", bytes: enc(smallQuestionMap(codes)) });
+      await completeFlow(snap);
+    }
   });
 
   it("predicts Step 3's code exactly (the same conversion as normalizeItemAnalysis)", async () => {
@@ -495,20 +511,36 @@ describe("the uploaded original in Step 3", () => {
     expect(validateCorrectAnswers(map, rows)).toBeNull();
   });
 
-  it("says when Step 3 cannot read it (custom version names, P5), and the generated map still works", async () => {
+  it("custom version names (P5) are read by Step 3 now, with the same binding as the companion", async () => {
     const renamed = flagged.replace(/version_1_/g, "A_").replace(/version_2_/g, "B_");
     const { snap, file } = original(renamed, "named.csv");
-    expect(file.description).toMatch(/cannot read this file as it is: its version columns are not named version_1/);
-    expect(await step3Format(renamed, "named.csv")).not.toBe("WIDE");
-    await completeFlow(snap);
+    expect(file.description).not.toMatch(/cannot read/);
+    expect(snap.versions).toEqual(["A", "B"]);
+    expect(await step3Format(renamed, "named.csv")).toBe("WIDE");
+    const rows = await importStudentFile(snap);
+    const originalMap = await importItemFile(renamed, "named.csv");
+    expect(new Set(originalMap.map((m) => m.code))).toEqual(new Set(["A", "B"])); // exact: no mapping needed
+    expect(validateCorrectAnswers(originalMap, rows)).toBeNull();
+    const { map } = await completeFlow(snap);
+    const triples = (m: ItemAnalysisRow[]) => m.map((r) => `${r.code}|${r.order}|${r.order_in_master}|${r.permutation}`).sort();
+    expect(triples(originalMap)).toEqual(triples(map));
   });
 
-  it("says when Step 3 cannot read it (an empty cell in the first row, P3)", async () => {
+  it("an empty cell in the first row (P3) no longer blocks Step 3", async () => {
     const lines = flagged.trim().split("\n");
     const blankFirst = [lines[0], lines[1].replace(/,(YES|NO),/, ",,"), ...lines.slice(2)].join("\n") + "\n";
     const { snap, file } = original(blankFirst, "blank.csv");
-    expect(file.description).toMatch(/a required column is empty in its first data row/);
-    expect(await step3Format(blankFirst, "blank.csv")).not.toBe("WIDE");
+    expect(file.description).not.toMatch(/cannot read/);
+    expect(await step3Format(blankFirst, "blank.csv")).toBe("WIDE");
+    await completeFlow(snap);
+  });
+
+  it("a mixed file (version_1 and A) keeps every name, in the dialog and in Step 3", async () => {
+    const mixed = flagged.replace(/version_2_/g, "A_");
+    const { snap } = original(mixed, "mixed.csv");
+    expect(new Set(snap.sourceVersions)).toEqual(new Set(["version_1", "A"]));
+    const parsed = await importItemFile(mixed, "mixed.csv");
+    expect(new Set(parsed.map((m) => m.code))).toEqual(new Set(["version_1", "A"]));
     await completeFlow(snap);
   });
 
@@ -547,8 +579,8 @@ describe("the uploaded original in Step 3", () => {
     const plain = buildGradingCenterSnapshot({ ...small, plantMiskey: true }, { fileName: "map.csv", bytes: enc(smallQuestionMap(["1", "2"])) });
     expect(fileOf(plain, "original").description).toMatch(note);
     expect(fileOf(plain, "question-map").description).toMatch(note);
-    const renamed = flagged.replace(/version_1_/g, "A_").replace(/version_2_/g, "B_");
-    const unreadable = buildGradingCenterSnapshot({ ...small, plantMiskey: true }, { fileName: "named.csv", bytes: enc(renamed) });
+    const gap = flagged.replace(/version_2_/g, "version_3_"); // legacy numbers 1, 3: Step 3 still requires consecutive
+    const unreadable = buildGradingCenterSnapshot({ ...small, plantMiskey: true }, { fileName: "gap.csv", bytes: enc(gap) });
     expect(fileOf(unreadable, "original").description).toMatch(/cannot read this file as it is/);
     expect(fileOf(unreadable, "original").description).toMatch(note);
   });
@@ -563,9 +595,9 @@ describe("malformed files are rejected, not repaired", () => {
   });
   it("an _Opt column without its _Q column, and the reverse", () => {
     const orphanOpt = good.map((l, i) => (i === 0 ? `${l},B_Opt` : `${l},A`)).join("\n");
-    expect(() => readShufflerFile(orphanOpt)).toThrow(/has "B_Opt" but no "B_Q" column/);
+    expect(() => readShufflerFile(orphanOpt)).toThrow(/has "B_Opt" but no matching _Q column for version "B"/);
     const orphanQ = good.map((l, i) => (i === 0 ? `${l},B_Q` : `${l},1`)).join("\n");
-    expect(() => readShufflerFile(orphanQ)).toThrow(/has "B_Q" but no "B_Opt" column/);
+    expect(() => readShufflerFile(orphanQ)).toThrow(/has "B_Q" but no matching _Opt column for version "B"/);
   });
   it("a repeated column name", () => {
     expect(() => readShufflerFile(good.map((l, i) => (i === 0 ? `${l},a_opt` : `${l},A`)).join("\n"))).toThrow(/repeats a column name/);

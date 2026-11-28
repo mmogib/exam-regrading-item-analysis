@@ -194,6 +194,18 @@ describe("Step 4: analyses agree with the independent oracle", () => {
       expect(s.p_i).toBeCloseTo(oracle.masterQuestions[i].p, 10);
       expect(s.D_i).toBeCloseTo(oracle.masterQuestions[i].D, 10);
       expect(s.r_pb).toBeCloseTo(oracle.masterQuestions[i].rpb, 10);
+      // 1.9.1: accepted sets (P6), option counts and DE incl. N/A (P7), option r_pb (P9), quartiles (P10)
+      const mq = oracle.masterQuestions[i];
+      if (mq.DE === null) expect(s.DE).toBeNull();
+      else expect(s.DE).toBeCloseTo(mq.DE, 10);
+      const options = app.optionStatistics.filter((o) => o.questionNumber === s.questionNumber);
+      expect(options.map((o) => o.option)).toEqual(mq.optionRows.map((o) => o.option));
+      options.forEach((o, j) => {
+        const ref = mq.optionRows[j];
+        expect([o.count, o.isCorrect, o.isFunctional], `Q${s.questionNumber} ${o.option}`).toEqual([ref.count, ref.isCorrect, ref.isFunctional]);
+        expect([o.T1, o.T2, o.T3, o.T4], `Q${s.questionNumber} ${o.option} quartiles`).toEqual(ref.T);
+        expect(o.r_pb, `Q${s.questionNumber} ${o.option} r_pb`).toBeCloseTo(ref.rpb, 10);
+      });
     });
     expect(app.testSummary.KR20).toBeCloseTo(oracle.reliability.KR20, 10);
   };
@@ -219,6 +231,13 @@ describe("Step 4: analyses agree with the independent oracle", () => {
     expect(item("dead-distractors").decision).not.toBe("KEEP");
     expect(item("low-discrimination").decision).not.toBe("KEEP");
     expect(Math.abs(item("low-discrimination").D_i)).toBeLessThan(0.2);
+    // P6: both accepted answers of the two-answer question are marked correct, and neither is a distractor
+    const two = identityExpected.planted.find((p) => p.kind === "two-answers")!;
+    const twoOptions = computeComprehensiveItemAnalysis(exam, rows, identityParams.questions).optionStatistics.filter(
+      (o) => o.questionNumber === two.master && o.isCorrect
+    );
+    expect(twoOptions.map((o) => o.option)).toEqual(two.publishedKey);
+    expect(twoOptions.every((o) => !o.isFunctional)).toBe(true);
   });
 
   // P2 (fixed in 1.8.1): with shuffled question order the comprehensive item

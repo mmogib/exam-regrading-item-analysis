@@ -405,13 +405,7 @@ export async function readCSVFileWithDetection(
     reader.onload = (e) => {
       try {
         const text = e.target?.result as string;
-        const workbook = XLSX.read(text, { type: "string" });
-        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-        const jsonData = XLSX.utils.sheet_to_json(firstSheet);
-
-        // Detect format
-        const detection = detectCSVFormat(jsonData);
-        resolve(detection);
+        resolve(detectCSVFormat(...readCsvTable(text)));
       } catch (error) {
         reject(error);
       }
@@ -439,15 +433,56 @@ export async function readCSVFile(file: File): Promise<ItemAnalysisRow[]> {
 }
 
 /**
- * Detect CSV format by examining column names
+ * Read an item-analysis CSV as text cells (P3, P12). Values are kept exactly as
+ * written ("001", "1A", "0x1" stay text; SheetJS would otherwise turn them into
+ * numbers). The column names come from the header row, and every data row gets
+ * every column ("" for an empty cell), so a blank cell in the first row can no
+ * longer hide a column. Repeated column names and files without data rows are
+ * errors.
  */
-function detectCSVFormat(data: any[]): CSVDetectionResult {
-  if (data.length === 0) {
-    return { format: "UNKNOWN", columns: [], data };
+export function readCsvTable(text: string): [Record<string, string>[], string[]] {
+  const workbook = XLSX.read(text, { type: "string", raw: true });
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  const grid = sheet
+    ? XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: "", raw: true, blankrows: false })
+    : [];
+  if (grid.length === 0) throw new Error("The file is empty.");
+
+  const headers = (grid[0] as unknown[]).map((h) => String(h ?? "").replace(/^﻿/, "").trim());
+  const seen = new Map<string, string>();
+  for (const h of headers) {
+    if (h === "") continue;
+    const key = h.toLowerCase();
+    if (seen.has(key)) {
+      throw new Error(`The file has two columns named "${seen.get(key)}" and "${h}". Rename one of them.`);
+    }
+    seen.set(key, h);
   }
 
-  const firstRow = data[0];
-  const columns = Object.keys(firstRow);
+  const rows = grid.slice(1).filter((r) => (r as unknown[]).some((c) => String(c ?? "").trim() !== ""));
+  if (rows.length === 0) throw new Error("The file has column names but no data rows.");
+
+  const keys = headers.map((h, i) => h || `__EMPTY_${i}`);
+  const data = rows.map((r) => {
+    const cells = r as unknown[];
+    const row: Record<string, string> = {};
+    keys.forEach((k, i) => {
+      row[k] = String(cells[i] ?? "");
+    });
+    return row;
+  });
+  return [data, headers.filter((h) => h !== "")];
+}
+
+/**
+ * Detect CSV format by examining column names (taken from the header row)
+ */
+function detectCSVFormat(data: any[], headerColumns?: string[]): CSVDetectionResult {
+  if (data.length === 0) {
+    return { format: "UNKNOWN", columns: headerColumns ?? [], data };
+  }
+
+  const columns = headerColumns ?? Object.keys(data[0]);
 
   debug("Detected columns:", columns);
 
@@ -471,10 +506,8 @@ function detectCSVFormat(data: any[]): CSVDetectionResult {
     );
   });
 
-  const hasVersionPairs = columns.some((col) => {
-    const lower = col.toLowerCase().replace(/[_\s]/g, "");
-    return /version\d+q/.test(lower) || /v\d+q/.test(lower);
-  });
+  // Version column pairs, legacy (version_1_Q) or named (A_Q); see findVersionPairs
+  const hasVersionPairs = columns.some((col) => classifyVersionHeader(col) !== null);
 
   const hasWideFormat =
     hasQColumn && hasOptionColumn && hasMasterCorrectColumn && hasVersionPairs;
@@ -519,10 +552,182 @@ function detectCSVFormat(data: any[]): CSVDetectionResult {
   return { format, columns, data };
 }
 
+/* ------------------------------------------------------------------ */
+/* Options Matrix version columns (P5) and version codes (P12)         */
+/* ------------------------------------------------------------------ */
+
+/** Legacy spellings: version_1_Q, version 1 Opt, v1_Q, v_2_opt, version1Q, ... */
+const LEGACY_VERSION_HEADER = /^(?:version|v)[_\s]*(\d+)[_\s]*(q|opt)$/i;
+/** Any other version name, as the Shuffler writes it: <name>_Q / <name>_Opt. */
+const NAMED_VERSION_HEADER = /^(.+)_(q|opt)$/i;
+
+type VersionHeader = { legacy: string | null; name: string; half: "q" | "opt" };
+
+/** How a column name takes part in a version pair, or null if it does not. */
+export function classifyVersionHeader(header: string): VersionHeader | null {
+  const h = header.trim();
+  const legacy = LEGACY_VERSION_HEADER.exec(h);
+  if (legacy) {
+    const half = legacy[2].toLowerCase() as "q" | "opt";
+    const name = h.replace(/[_\s]*(q|opt)$/i, "");
+    return { legacy: String(Number(legacy[1])), name, half };
+  }
+  const named = NAMED_VERSION_HEADER.exec(h);
+  if (named && named[1].trim() !== "") {
+    return { legacy: null, name: named[1].trim(), half: named[2].toLowerCase() as "q" | "opt" };
+  }
+  return null;
+}
+
+export interface VersionPairs {
+  /** "legacy": every pair is version_N / vN, codes are the numbers. "named": codes are the names as written. */
+  mode: "legacy" | "named";
+  pairs: { code: string; qCol: string; optCol: string }[];
+  /** Legacy mode only: the version numbers are consecutive (Step 3 requires it). */
+  consecutive: boolean;
+}
+
+/**
+ * The version column pairs of an Options Matrix (P5), one rule for Step 3 and
+ * the template dialog. A file whose pairs are all legacy-named (version_N_Q,
+ * vN_Opt, ...) keeps numeric codes; any other file keeps every name as written,
+ * including names like "version_1". Both halves of every pair are required, and
+ * two pairs may not name the same version. Null when the file has no pairs.
+ */
+export function findVersionPairs(headers: string[]): VersionPairs | null {
+  const found = headers
+    .map((header) => ({ header: header.trim(), v: classifyVersionHeader(header) }))
+    .filter((x): x is { header: string; v: VersionHeader } => x.v !== null);
+  if (found.length === 0) return null;
+
+  const mode: VersionPairs["mode"] = found.every((x) => x.v.legacy !== null) ? "legacy" : "named";
+  const byCode = new Map<string, { code: string; q?: string; opt?: string }>();
+  for (const { header, v } of found) {
+    const code = mode === "legacy" ? v.legacy! : v.name;
+    const key = code.toLowerCase();
+    const entry = byCode.get(key) ?? { code };
+    if (entry[v.half] !== undefined) {
+      throw new Error(`The Options Matrix has two columns for version "${entry.code}": "${entry[v.half]}" and "${header}".`);
+    }
+    entry[v.half] = header;
+    byCode.set(key, entry);
+  }
+  const pairs: VersionPairs["pairs"] = [];
+  for (const entry of byCode.values()) {
+    if (!entry.q || !entry.opt) {
+      const has = entry.q ?? entry.opt;
+      const missing = entry.q ? "_Opt" : "_Q";
+      throw new Error(`The Options Matrix has "${has}" but no matching ${missing} column for version "${entry.code}".`);
+    }
+    pairs.push({ code: entry.code, qCol: entry.q, optCol: entry.opt });
+  }
+
+  let consecutive = true;
+  if (mode === "legacy") {
+    pairs.sort((a, b) => Number(a.code) - Number(b.code));
+    consecutive = pairs.every((p, i) => i === 0 || Number(p.code) === Number(pairs[i - 1].code) + 1);
+  }
+  return { mode, pairs, consecutive };
+}
+
+/**
+ * A version code as Step 3 stores it (P12): an all-digit label becomes a number
+ * (001 -> 1); any other label stays its trimmed text ("1A", "0x1", "1e2"). An
+ * all-digit label too long to be an exact number is an error, never merged.
+ */
+export function normalizeVersionCode(raw: unknown): string | number {
+  if (typeof raw === "number") {
+    if (!Number.isSafeInteger(raw)) throw new Error(`Version code ${raw} is not a whole number the app can use.`);
+    return raw;
+  }
+  const s = String(raw ?? "").trim();
+  if (/^\d+$/.test(s)) {
+    const n = Number(s);
+    if (!Number.isSafeInteger(n)) throw new Error(`Version code "${s}" is too long to use as a number. Use a shorter code.`);
+    return n;
+  }
+  return s;
+}
+
+/** Identity for matching codes by number: an all-digit label without leading zeros; any other label as it is. */
+export function versionCodeKey(code: string | number): string {
+  const s = String(code).trim();
+  return /^\d+$/.test(s) ? s.replace(/^0+(?=\d)/, "") : s;
+}
+
+/** Deterministic display order: all-digit codes by value, then other codes (numeric-aware), ties by the full code. */
+export function sortVersionCodes(codes: string[]): string[] {
+  const digits = (s: string) => /^\d+$/.test(s);
+  return [...codes].sort((a, b) => {
+    const da = digits(a);
+    const db = digits(b);
+    if (da && db) {
+      const ka = versionCodeKey(a);
+      const kb = versionCodeKey(b);
+      if (ka.length !== kb.length) return ka.length - kb.length;
+      if (ka !== kb) return ka < kb ? -1 : 1;
+    } else if (da !== db) {
+      return da ? -1 : 1;
+    } else {
+      const c = a.localeCompare(b, undefined, { numeric: true });
+      if (c !== 0) return c;
+    }
+    return a < b ? -1 : a > b ? 1 : 0;
+  });
+}
+
+export type CodeBinding =
+  | { kind: "exact" }
+  | { kind: "numeric"; itemToStudent: Map<string, string> }
+  | { kind: "manual"; studentCodes: string[]; itemCodes: string[]; suggestion: Map<string, string> };
+
+/**
+ * How Step 3 binds the item-analysis codes to the student codes (P12):
+ * - "exact": the two code sets are equal (in any order);
+ * - "numeric": both sets are all-digit, each side has no two codes with the same
+ *   number, and the numbers match one to one (1 = 001): bind by number;
+ * - "manual": anything else; the user confirms a mapping (suggested by position
+ *   in the deterministic order).
+ */
+export function bindVersionCodes(studentCodes: string[], itemCodes: string[]): CodeBinding {
+  const s = Array.from(new Set(studentCodes.map((c) => String(c).trim())));
+  const i = Array.from(new Set(itemCodes.map((c) => String(c).trim())));
+  const sSet = new Set(s);
+  if (s.length === i.length && i.every((c) => sSet.has(c))) return { kind: "exact" };
+
+  const allDigits = (xs: string[]) => xs.length > 0 && xs.every((x) => /^\d+$/.test(x));
+  if (allDigits(s) && allDigits(i)) {
+    const sKeys = new Map(s.map((c) => [versionCodeKey(c), c]));
+    const iKeys = new Map(i.map((c) => [versionCodeKey(c), c]));
+    if (sKeys.size === s.length && iKeys.size === i.length && sKeys.size === iKeys.size && [...iKeys.keys()].every((k) => sKeys.has(k))) {
+      return { kind: "numeric", itemToStudent: new Map(i.map((c) => [c, sKeys.get(versionCodeKey(c))!])) };
+    }
+  }
+
+  const studentSorted = sortVersionCodes(s);
+  const itemSorted = sortVersionCodes(i);
+  const suggestion = new Map<string, string>();
+  for (let k = 0; k < Math.min(studentSorted.length, itemSorted.length); k++) suggestion.set(studentSorted[k], itemSorted[k]);
+  return { kind: "manual", studentCodes: studentSorted, itemCodes: itemSorted, suggestion };
+}
+
+/** Rewrite item-analysis codes to student codes (item code -> student code). Rows without a binding keep their code. */
+export function applyCodeBinding(rows: ItemAnalysisRow[], itemToStudent: Map<string, string>): ItemAnalysisRow[] {
+  return rows.map((ia) => {
+    const bound = itemToStudent.get(String(ia.code).trim());
+    return bound === undefined ? ia : { ...ia, code: bound };
+  });
+}
+
 /**
  * Parse WIDE format CSV (one row per option per master question)
  * Converts to ItemAnalysisRow[] format with permutation strings
  * EXPORTED for use in Step 3
+ *
+ * Strict (P5, P7): each master question has 2-5 option rows labelled A..n, each
+ * once, with exactly one Master_Correct flag; for every version its rows give
+ * one position and a one-to-one shuffle of A..n. The permutation has n letters
+ * (index = version letter, value = master letter); nothing is padded.
  */
 export function parseWideFormat(
   data: any[],
@@ -554,164 +759,86 @@ export function parseWideFormat(
     );
   }
 
-  // Extract version information from column names
-  // Pattern: version_X_Q and version_X_Opt (or v_X_Q and v_X_Opt)
-  const versionPattern = /(?:version|v)[_\s]*(\d+)[_\s]*(?:q|opt)/i;
-  const versionNumbers = new Set<number>();
-  const versionColumns: {
-    [version: number]: { qCol: string; optCol: string };
-  } = {};
-
-  columns.forEach((col) => {
-    const match = col.match(versionPattern);
-    if (match) {
-      const versionNum = parseInt(match[1]);
-      versionNumbers.add(versionNum);
-
-      if (!versionColumns[versionNum]) {
-        versionColumns[versionNum] = { qCol: "", optCol: "" };
-      }
-
-      const lower = col.toLowerCase();
-      if (lower.includes("_q") || lower.endsWith("q")) {
-        versionColumns[versionNum].qCol = col;
-      } else if (lower.includes("opt")) {
-        versionColumns[versionNum].optCol = col;
-      }
-    }
-  });
-
-  // Sort version numbers and validate they're sequential
-  const sortedVersions = Array.from(versionNumbers).sort((a, b) => a - b);
-
-  if (sortedVersions.length === 0) {
+  const versions = findVersionPairs(columns);
+  if (!versions) {
     throw new Error("No version columns found in WIDE format");
   }
-
-  // Validate sequential
-  const startVersion = sortedVersions[0];
-  for (let i = 0; i < sortedVersions.length; i++) {
-    if (sortedVersions[i] !== startVersion + i) {
-      throw new Error(
-        `Version numbers must be sequential. Found: ${sortedVersions.join(
-          ", "
-        )}. ` +
-          `Please ensure versions are numbered sequentially (e.g., 1,2,3,4 or 5,6,7,8).`
-      );
-    }
+  if (versions.mode === "legacy" && !versions.consecutive) {
+    const found = versions.pairs.map((p) => p.code).join(", ");
+    throw new Error(
+      `Version numbers must be sequential. Found: ${found}. ` +
+        `Please ensure versions are numbered sequentially (e.g., 1,2,3,4 or 5,6,7,8).`
+    );
   }
+  debug("Detected versions:", versions.pairs.map((p) => p.code));
 
-  debug("Detected versions:", sortedVersions);
+  const LETTERS = "ABCDE";
+  const isYes = (v: unknown) => /^(yes|y|true|1)$/i.test(String(v ?? "").trim());
 
   // Group rows by master question
-  const questionGroups: { [masterQ: number]: any[] } = {};
-  data.forEach((row) => {
-    const masterQ = parseInt(String(row[qCol]));
-    if (!isNaN(masterQ)) {
-      if (!questionGroups[masterQ]) {
-        questionGroups[masterQ] = [];
-      }
-      questionGroups[masterQ].push(row);
+  const questionGroups = new Map<number, any[]>();
+  data.forEach((row, i) => {
+    const rawQ = String(row[qCol] ?? "").trim();
+    const masterQ = Number(rawQ);
+    if (!/^\d+$/.test(rawQ) || masterQ < 1) {
+      throw new Error(`Options Matrix row ${i + 2}: "${qCol}" must be a whole number (found "${rawQ}").`);
     }
+    if (!questionGroups.has(masterQ)) questionGroups.set(masterQ, []);
+    questionGroups.get(masterQ)!.push(row);
   });
 
-  // Process each master question
   const result: ItemAnalysisRow[] = [];
-  const masterQuestions = Object.keys(questionGroups)
-    .map(Number)
-    .sort((a, b) => a - b);
-  debug("Detected questionGroups:", questionGroups);
-  debug("Detected masterQuestions:", masterQuestions);
-  masterQuestions.forEach((masterQ) => {
-    const optionRows = questionGroups[masterQ];
+  const masterQuestions = [...questionGroups.keys()].sort((a, b) => a - b);
+  for (const masterQ of masterQuestions) {
+    const optionRows = questionGroups.get(masterQ)!;
+    const options = optionRows.map((row) => String(row[optCol] ?? "").trim().toUpperCase());
+    const n = options.length;
+    const allowed = LETTERS.slice(0, n);
+    if (n < 2 || n > 5 || new Set(options).size !== n || !options.every((o) => o.length === 1 && allowed.includes(o))) {
+      throw new Error(
+        `Options Matrix, master Q${masterQ}: each option row needs one letter, A to ${LETTERS[Math.min(Math.max(n, 2), 5) - 1]}, each used once (found ${options.map((o) => o || "(blank)").join(", ")}).`
+      );
+    }
+    const flagged = optionRows.filter((row) => isYes(row[correctCol]));
+    if (flagged.length !== 1) {
+      throw new Error(`Options Matrix, master Q${masterQ}: exactly one option must be marked as ${correctCol} (found ${flagged.length}).`);
+    }
+    const correctMaster = String(flagged[0][optCol]).trim().toUpperCase();
 
-    // Get all options for this question (A, B, C, D, E or fewer)
-    const masterOptions: { [opt: string]: any } = {};
-    let correctOption: string | null = null;
-
-    optionRows.forEach((row) => {
-      const opt = String(row[optCol]).trim().toUpperCase();
-      masterOptions[opt] = row;
-
-      // Check if this is the correct answer
-      const isCorrect = String(row[correctCol]).trim().toUpperCase();
-      if (
-        isCorrect === "YES" ||
-        isCorrect === "Y" ||
-        isCorrect === "TRUE" ||
-        isCorrect === "1"
-      ) {
-        correctOption = opt;
+    for (const pair of versions.pairs) {
+      const positions = new Set(optionRows.map((row) => String(row[pair.qCol] ?? "").trim()));
+      const rawPosition = [...positions][0];
+      if (positions.size !== 1 || !/^\d+$/.test(rawPosition) || Number(rawPosition) < 1) {
+        throw new Error(`Options Matrix, master Q${masterQ}, version ${pair.code}: the option rows must give one whole-number position in "${pair.qCol}".`);
       }
-    });
-    // Process each version
-    sortedVersions.forEach((versionNum) => {
-      const { qCol: vQCol, optCol: vOptCol } = versionColumns[versionNum];
-
-      if (!vQCol || !vOptCol) {
-        debug(`Warning: Missing columns for version ${versionNum}`);
-        return;
-      }
-
-      // Get question position for this version (from first option row)
-      const firstRow = optionRows[0];
-      const questionPosition = parseInt(String(firstRow[vQCol]));
-
-      if (isNaN(questionPosition)) {
-        return; // Skip if no valid position
-      }
-
-      // Build permutation string
-      // Map master option (A-E) to version option (A-E)
-      // Start with identity: A→A, B→B, C→C, D→D, E→E
-      const permutationMap: { [masterOpt: string]: string } = {
-        A: "A",
-        B: "B",
-        C: "C",
-        D: "D",
-        E: "E",
-      };
-
-      // Update mapping based on actual options in this question
-      Object.keys(masterOptions).forEach((masterOpt) => {
-        const row = masterOptions[masterOpt];
-        const versionOpt = String(row[vOptCol]).trim().toUpperCase();
-        if (versionOpt && /^[A-E]$/.test(versionOpt)) {
-          permutationMap[versionOpt] = masterOpt;
+      const perm: string[] = new Array(n).fill("");
+      let versionCorrect = "";
+      for (const row of optionRows) {
+        const masterLetter = String(row[optCol]).trim().toUpperCase();
+        const versionLetter = String(row[pair.optCol] ?? "").trim().toUpperCase();
+        const idx = LETTERS.indexOf(versionLetter);
+        if (versionLetter.length !== 1 || idx < 0 || idx >= n || perm[idx] !== "") {
+          throw new Error(
+            `Options Matrix, master Q${masterQ}, version ${pair.code}: the letters in "${pair.optCol}" must be a one-to-one shuffle of A to ${LETTERS[n - 1]}.`
+          );
         }
-      });
-
-      // Build permutation string: ABCDE → e.g., "BACDE" if A↔B swapped
-      const permutation =
-        permutationMap["A"] +
-        permutationMap["B"] +
-        permutationMap["C"] +
-        permutationMap["D"] +
-        permutationMap["E"];
-
-      // Determine correct answer in this version
-      let versionCorrect: string | undefined = undefined;
-      if (correctOption) {
-        versionCorrect = Object.keys(permutationMap).find(
-          (key) => permutationMap[key] === correctOption
-        );
-        // versionCorrect = permutationMap[correctOption];
+        perm[idx] = masterLetter;
+        if (masterLetter === correctMaster) versionCorrect = versionLetter;
       }
-
-      // Create ItemAnalysisRow
       result.push({
-        code: versionNum,
-        order: questionPosition,
+        code: versions.mode === "legacy" ? Number(pair.code) : pair.code,
+        order: Number(rawPosition),
         order_in_master: masterQ,
-        permutation: permutation,
+        permutation: perm.join(""),
         correct: versionCorrect,
       });
-    });
-  });
+    }
+  }
 
   debug("Parsed WIDE format:", result.length, "rows");
   return result;
 }
+
 
 /**
  * Normalize import_test_data with column mapping
@@ -811,15 +938,8 @@ export function normalizeItemAnalysis(
           row.ORDER_IN_MASTER;
       }
 
-      // Parse flexibly - handle strings and numbers
-      // For code: try to parse as number, but keep as string if it's alphanumeric
-      let code: string | number;
-      if (typeof codeRaw === "number") {
-        code = codeRaw;
-      } else {
-        const parsed = parseInt(String(codeRaw));
-        code = isNaN(parsed) ? String(codeRaw).trim() : parsed;
-      }
+      // Version code (P12): all-digit labels become numbers, anything else stays text
+      const code = normalizeVersionCode(codeRaw);
 
       const order =
         typeof orderRaw === "number" ? orderRaw : parseInt(String(orderRaw));
@@ -1200,7 +1320,7 @@ export function exportComprehensiveAnalysisToExcel(
     "Difficulty (p)": item.p_i.toFixed(3),
     "Discrimination (D)": item.D_i.toFixed(3),
     "Point-Biserial (r_pb)": item.r_pb.toFixed(3),
-    "Distractor Efficiency (%)": item.DE.toFixed(1),
+    "Distractor Efficiency (%)": item.DE === null ? "N/A" : item.DE.toFixed(1),
     Decision: item.decision,
     Reason: item.decisionReason || "",
   }));
@@ -1216,10 +1336,10 @@ export function exportComprehensiveAnalysisToExcel(
     Percentage: `${opt.percentage.toFixed(1)}%`,
     "Discrimination (D_ij)": opt.D_ij.toFixed(3),
     "Point-Biserial (r_pb)": opt.r_pb.toFixed(3),
-    "Top 25% (T1)": opt.T1,
-    "Second 25% (T2)": opt.T2,
-    "Third 25% (T3)": opt.T3,
-    "Bottom 25% (T4)": opt.T4,
+    "Top group (T1)": opt.T1,
+    "Second group (T2)": opt.T2,
+    "Third group (T3)": opt.T3,
+    "Bottom group (T4)": opt.T4,
     Functional: opt.isFunctional
       ? "Yes"
       : opt.option === "Blank/Other"
@@ -1244,12 +1364,25 @@ export function exportComprehensiveAnalysisToExcel(
     {
       Metric: "Point-Biserial (r_pb)",
       "Ideal Range": "≥ 0.20",
-      Interpretation: "Correlation with rest score (corrected for item)",
+      Interpretation:
+        "Item: correlation between answering correctly and the rest score (total without this item). Option: correlation between choosing that option and the same rest score",
     },
     {
       Metric: "Distractor Efficiency",
       "Ideal Range": "≥ 75%",
-      Interpretation: "Percentage of distractors selected by ≥5% of students",
+      Interpretation:
+        "Percentage of distractors (options the key does not accept) selected by ≥5% of all students; N/A when every option is accepted",
+    },
+    {
+      Metric: "Score groups (T1-T4)",
+      "Ideal Range": "",
+      Interpretation:
+        "Top to bottom, nominally a quarter each; equal totals share a group (ties go to the higher group), so groups can be unequal or empty",
+    },
+    {
+      Metric: "Top/bottom 27% (for D)",
+      "Ideal Range": "",
+      Interpretation: "Fixed size ceil(27% of students); ties are broken by row order; in very small classes the groups can overlap",
     },
     {
       Metric: "KR-20 Reliability",
@@ -1556,9 +1689,11 @@ export function computeCodeAverages(
 }
 
 /**
- * Classify students into quartiles based on total score
- * T1 = Top 25%, T2 = Second 25%, T3 = Third 25%, T4 = Bottom 25%
- * Handles ties at boundaries by assigning to the higher quartile
+ * Classify students into quartile score groups based on total score
+ * T1 = top, T2 = second, T3 = third, T4 = bottom (nominally 25% each).
+ * Ties: students with equal totals always share a group; a tie at a cutoff
+ * goes to the higher group, so groups can be unequal or empty (P10).
+ * Returns the students sorted by total, highest first (stable for ties).
  */
 export function classifyStudentsByQuartile(
   results: StudentResult[]
@@ -1588,45 +1723,19 @@ export function classifyStudentsByQuartile(
   const totalStudents = sorted.length;
   if (totalStudents === 0) return [];
 
-  // Calculate quartile boundaries
-  const q1End = Math.ceil(totalStudents * 0.25);
-  const q2End = Math.ceil(totalStudents * 0.5);
-  const q3End = Math.ceil(totalStudents * 0.75);
+  // Quartile score groups (P10). The nominal ends ceil(25%), ceil(50%) and
+  // ceil(75%) of N are computed once; the scores at those positions are the
+  // cutoffs. Each student goes to the highest group whose cutoff they reach, so
+  // students with equal totals always share a group (a tie block moves up as a
+  // whole, even across several cutoffs). Groups can be unequal or empty.
+  const cutoff = (fraction: number) => sorted[Math.ceil(totalStudents * fraction) - 1].Tot;
+  const [cut1, cut2, cut3] = [cutoff(0.25), cutoff(0.5), cutoff(0.75)];
 
-  // Assign ranks with tie handling
-  const ranked: StudentResultWithRank[] = [];
-
-  for (let i = 0; i < sorted.length; i++) {
-    const student = sorted[i];
-    let rank: "T1" | "T2" | "T3" | "T4";
-
-    // Handle ties at boundaries by checking the score
-    if (i < q1End) {
-      rank = "T1";
-    } else if (i === q1End && sorted[i].Tot === sorted[q1End - 1].Tot) {
-      // Tie at T1/T2 boundary - assign to T1
-      rank = "T1";
-    } else if (i < q2End) {
-      rank = "T2";
-    } else if (i === q2End && sorted[i].Tot === sorted[q2End - 1].Tot) {
-      // Tie at T2/T3 boundary - assign to T2
-      rank = "T2";
-    } else if (i < q3End) {
-      rank = "T3";
-    } else if (i === q3End && sorted[i].Tot === sorted[q3End - 1].Tot) {
-      // Tie at T3/T4 boundary - assign to T3
-      rank = "T3";
-    } else {
-      rank = "T4";
-    }
-
-    ranked.push({
-      ...student,
-      Rank: rank,
-    });
-  }
-
-  return ranked;
+  // Keep the sorted (stable) order: the 27% D groups rely on it
+  return sorted.map((student) => ({
+    ...student,
+    Rank: student.Tot >= cut1 ? "T1" : student.Tot >= cut2 ? "T2" : student.Tot >= cut3 ? "T3" : "T4",
+  }));
 }
 
 /**
@@ -2098,7 +2207,8 @@ function computeKR20(
   pointsPerQuestion: number = POINTS_PER_Q
 ): number {
   const k = itemProportions.length;
-  if (k === 0) return 0;
+  // KR-20 needs k >= 2 (k / (k - 1)); the comprehensive preflight rejects K < 2 first (P8)
+  if (k < 2) return 0;
 
   // Calculate variance of number of items correct (not total points)
   // Convert Tot (in points) to number of items correct
@@ -2116,98 +2226,52 @@ function computeKR20(
   return kr20;
 }
 
+/** Master-level metadata of one question, the same in every version that has students (P6, P7). */
+interface MasterMeta {
+  /** Accepted answers in master letters: the working key from the solution rows. */
+  accepted: string[];
+  /** Number of real options, A..n (the permutation length). */
+  options: number;
+}
+
+type ChoiceOf = (student: StudentResultWithRank, masterQ: number) => string | null;
+type RestScoreOf = (student: StudentResultWithRank, masterQ: number) => number;
+
 /**
- * Method C: Calculate distractor efficiency for each item
- * Requires permutation data to decode options
+ * Method C: Calculate distractor efficiency for each item (P6, P7)
+ * Distractors are the real options (A..n) that the working key does not accept;
+ * one is functional when at least 5% of all students choose it. DE is null
+ * (shown as N/A) when every option is accepted, so there are no distractors.
  */
 function computeDistractorEfficiencyPerItem(
   students: StudentResultWithRank[],
-  answersData: ExamRow[],
-  itemAnalysis: ItemAnalysisRow[],
-  masterQ: number
-): number {
+  masterQ: number,
+  meta: MasterMeta,
+  choiceOf: ChoiceOf
+): number | null {
+  const distractors = "ABCDE".slice(0, meta.options).split("").filter((o) => !meta.accepted.includes(o));
+  if (distractors.length === 0) return null;
   const N = students.length;
   if (N === 0) return 0;
 
-  // Get mappings for this master question
-  const mappings = itemAnalysis.filter((ia) => ia.order_in_master === masterQ);
-  if (mappings.length === 0) return 0;
-
-  // Count how many students selected each option
-  const optionCounts: { [option: string]: number } = {
-    A: 0,
-    B: 0,
-    C: 0,
-    D: 0,
-    E: 0,
-  };
-
+  const counts = new Map<string, number>();
   students.forEach((student) => {
-    const studentCode = String(student.Code);
-    const mapping = mappings.find((m) => String(m.code) === studentCode);
-    if (!mapping || !mapping.permutation) return;
-
-    const examRow = answersData.find(
-      (row) =>
-        row.ID === student.ID &&
-        row.Code === student.Code &&
-        !isSolutionRow(row)
-    );
-    if (!examRow) return;
-
-    const versionQuestionCol = String(mapping.order);
-    const studentAnswer = examRow[versionQuestionCol];
-
-    // Decode to master option
-    const masterChoice = decodePermutation(studentAnswer, mapping.permutation);
-    if (
-      masterChoice &&
-      masterChoice !== "Blank/Other" &&
-      optionCounts[masterChoice] !== undefined
-    ) {
-      optionCounts[masterChoice]++;
-    }
+    const choice = choiceOf(student, masterQ);
+    if (choice !== null) counts.set(choice, (counts.get(choice) ?? 0) + 1);
   });
-
-  // Get correct answer in master terms by decoding through permutation
-  let masterCorrect: string = "A";
-  for (const mapping of mappings) {
-    if (mapping.correct && mapping.permutation) {
-      const choices = ["A", "B", "C", "D", "E"];
-      const permArray = mapping.permutation.toUpperCase().split("");
-      const correctIndex = choices.indexOf(mapping.correct.toUpperCase());
-      if (correctIndex !== -1 && correctIndex < permArray.length) {
-        masterCorrect = permArray[correctIndex];
-        break;
-      }
-    }
-  }
-
-  // Count functional distractors (those selected by >= 5% of students)
-  let functionalCount = 0;
-  const threshold = N * 0.05;
-
-  ["A", "B", "C", "D", "E"].forEach((option) => {
-    if (option !== masterCorrect && optionCounts[option] >= threshold) {
-      functionalCount++;
-    }
-  });
-
-  // DE = (functional distractors / total distractors) * 100
-  const totalDistractors = 4; // For 5-option questions
-  const DE = (functionalCount / totalDistractors) * 100;
-
-  return DE;
+  const functional = distractors.filter((o) => (counts.get(o) ?? 0) >= N * 0.05).length;
+  return (functional / distractors.length) * 100;
 }
 
 /**
  * Method I: Determine item decision (Keep/Revise/Investigate)
+ * With DE null (no distractors), the distractor criteria are skipped.
  */
 function determineItemDecision(
   p_i: number,
   r_pb: number,
   D_i: number,
-  DE: number
+  DE: number | null
 ): { decision: "KEEP" | "REVISE" | "INVESTIGATE"; reason: string } {
   // Investigate immediately if r_pb or D_i is negative
   if (r_pb < 0 || D_i < 0) {
@@ -2221,17 +2285,20 @@ function determineItemDecision(
   }
 
   // Keep if good stats
-  if (p_i >= 0.3 && p_i <= 0.8 && r_pb >= 0.2 && DE >= 75) {
+  if (p_i >= 0.3 && p_i <= 0.8 && r_pb >= 0.2 && (DE === null || DE >= 75)) {
     return {
       decision: "KEEP",
-      reason: "Good difficulty, discrimination, and distractor efficiency",
+      reason:
+        DE === null
+          ? "Good difficulty and discrimination (no distractors: every option is accepted)"
+          : "Good difficulty, discrimination, and distractor efficiency",
     };
   }
 
   // Revise if any issues
   const reasons: string[] = [];
 
-  if (p_i > 0.8 && DE <= 50) {
+  if (p_i > 0.8 && DE !== null && DE <= 50) {
     reasons.push("Too easy with weak distractors");
   } else if (p_i > 0.8) {
     reasons.push("Too easy");
@@ -2245,7 +2312,7 @@ function determineItemDecision(
     reasons.push("Weak discrimination");
   }
 
-  if (DE < 75) {
+  if (DE !== null && DE < 75) {
     reasons.push("Poor distractor efficiency");
   }
 
@@ -2264,160 +2331,79 @@ function determineItemDecision(
 
 /**
  * Method E & G: Calculate option-level statistics (D_ij and r_pb for each option)
- * For a specific master question
+ * For a specific master question. Options are the real ones, A..n, plus
+ * Blank/Other (a blank, an invalid mark or a letter beyond n). An option is
+ * correct when the working key accepts it (P6). Option r_pb correlates choosing
+ * the option with the item's rest score R = total - points x (item correct),
+ * the same R as the item r_pb (P9).
  */
 function computeOptionStatistics(
   students: StudentResultWithRank[],
-  answersData: ExamRow[],
-  itemAnalysis: ItemAnalysisRow[],
-  masterQ: number
+  masterQ: number,
+  meta: MasterMeta,
+  choiceOf: ChoiceOf,
+  restScoreOf: RestScoreOf
 ): import("@/types/exam").OptionStatistics[] {
   const N = students.length;
   if (N === 0) return [];
 
-  // Get mappings for this master question
-  const mappings = itemAnalysis.filter((ia) => ia.order_in_master === masterQ);
-  if (mappings.length === 0) return [];
-
-  // Determine the correct answer in master terms by decoding through permutation
-  let masterCorrect: string | null = null;
-  for (const mapping of mappings) {
-    if (mapping.correct && mapping.permutation) {
-      // Find which master option corresponds to the correct answer in this version
-      const choices = ["A", "B", "C", "D", "E"];
-      const permArray = mapping.permutation.toUpperCase().split("");
-      const correctIndex = choices.indexOf(mapping.correct.toUpperCase());
-      if (correctIndex !== -1 && correctIndex < permArray.length) {
-        masterCorrect = permArray[correctIndex];
-        break;
-      }
-    }
-  }
-
-  if (!masterCorrect) {
-    masterCorrect = "A"; // Fallback
-  }
-
-  // Initialize option counts and quartile counts
-  const optionData: {
-    [option: string]: {
-      count: number;
-      T1: number;
-      T2: number;
-      T3: number;
-      T4: number;
-      studentsWhoSelected: StudentResultWithRank[];
-    };
-  } = {};
-
-  ["A", "B", "C", "D", "E", "Blank/Other"].forEach((opt) => {
-    optionData[opt] = {
-      count: 0,
-      T1: 0,
-      T2: 0,
-      T3: 0,
-      T4: 0,
-      studentsWhoSelected: [],
-    };
-  });
+  const options = [..."ABCDE".slice(0, meta.options).split(""), "Blank/Other"];
+  const keyOf = (s: StudentResultWithRank) => `${s.Code}\u0000${s.ID}`;
+  const optionData = new Map(
+    options.map((o) => [o, { count: 0, T1: 0, T2: 0, T3: 0, T4: 0, selected: new Set<string>() }])
+  );
 
   // Count selections
   students.forEach((student) => {
-    const studentCode = String(student.Code);
-    const mapping = mappings.find((m) => String(m.code) === studentCode);
-    if (!mapping || !mapping.permutation) return;
-
-    const examRow = answersData.find(
-      (row) =>
-        row.ID === student.ID &&
-        row.Code === student.Code &&
-        !isSolutionRow(row)
-    );
-    if (!examRow) return;
-
-    const versionQuestionCol = String(mapping.order);
-    const studentAnswer = examRow[versionQuestionCol];
-
-    // Decode to master option
-    const masterChoice = decodePermutation(studentAnswer, mapping.permutation);
-
-    if (optionData[masterChoice]) {
-      optionData[masterChoice].count++;
-      optionData[masterChoice][student.Rank]++;
-      optionData[masterChoice].studentsWhoSelected.push(student);
-    }
+    const choice = choiceOf(student, masterQ);
+    if (choice === null) return;
+    const data = optionData.get(options.includes(choice) ? choice : "Blank/Other")!;
+    data.count++;
+    data[student.Rank]++;
+    data.selected.add(keyOf(student));
   });
 
-  // Calculate upper-lower groups (27%)
+  // Upper-lower groups (27%), stable order on ties
   const sorted = [...students].sort((a, b) => b.Tot - a.Tot);
-  const n = sorted.length;
-  const cutoff = Math.ceil(n * 0.27);
-  const upperGroup = sorted.slice(0, cutoff);
-  const lowerGroup = sorted.slice(-cutoff);
+  const cutoff = Math.ceil(sorted.length * 0.27);
+  const upperGroup = new Set(sorted.slice(0, cutoff).map(keyOf));
+  const lowerGroup = new Set(sorted.slice(-cutoff).map(keyOf));
 
-  const totalAnswered = Object.values(optionData).reduce(
-    (sum, d) => sum + d.count,
-    0
-  );
+  const totalAnswered = [...optionData.values()].reduce((sum, d) => sum + d.count, 0);
 
-  // Build result for each option
-  return ["A", "B", "C", "D", "E", "Blank/Other"].map((option) => {
-    const data = optionData[option];
+  // The item's rest score for every student (P9)
+  const rest = students.map((s) => restScoreOf(s, masterQ));
+  const sdRest = stdDev(rest);
+
+  return options.map((option) => {
+    const data = optionData.get(option)!;
     const p_ij = totalAnswered > 0 ? data.count / totalAnswered : 0;
 
-    // Calculate D_ij (upper-lower discrimination for this option)
-    const upperSelected = data.studentsWhoSelected.filter((s) =>
-      upperGroup.some((u) => u.ID === s.ID && u.Code === s.Code)
-    ).length;
-    const lowerSelected = data.studentsWhoSelected.filter((s) =>
-      lowerGroup.some((l) => l.ID === s.ID && l.Code === s.Code)
-    ).length;
-
-    const pUpper =
-      upperGroup.length > 0 ? upperSelected / upperGroup.length : 0;
-    const pLower =
-      lowerGroup.length > 0 ? lowerSelected / lowerGroup.length : 0;
+    // D_ij: upper-lower discrimination for this option
+    const upperSelected = [...data.selected].filter((k) => upperGroup.has(k)).length;
+    const lowerSelected = [...data.selected].filter((k) => lowerGroup.has(k)).length;
+    const pUpper = upperGroup.size > 0 ? upperSelected / upperGroup.size : 0;
+    const pLower = lowerGroup.size > 0 ? lowerSelected / lowerGroup.size : 0;
     const D_ij = pUpper - pLower;
 
-    // Calculate r_pb for this option (point-biserial with rest score)
+    // r_pb: choosing this option against the item's rest score (0 when either is constant)
     let r_pb = 0;
-    if (
-      data.studentsWhoSelected.length > 0 &&
-      data.studentsWhoSelected.length < students.length
-    ) {
-      const restScoresSelected = data.studentsWhoSelected.map((s) => {
-        // Rest score = total score (we don't subtract this option since we're measuring option selection, not correctness)
-        return s.Tot;
-      });
-      const restScoresNotSelected = students
-        .filter(
-          (s) =>
-            !data.studentsWhoSelected.some(
-              (sel) => sel.ID === s.ID && sel.Code === s.Code
-            )
-        )
-        .map((s) => s.Tot);
-
-      const meanSelected = mean(restScoresSelected);
-      const meanNotSelected = mean(restScoresNotSelected);
-      const allScores = students.map((s) => s.Tot);
-      const sd = stdDev(allScores);
-
-      const p = data.studentsWhoSelected.length / students.length;
-      const q = 1 - p;
-
-      if (sd > 0) {
-        r_pb = ((meanSelected - meanNotSelected) / sd) * Math.sqrt(p * q);
-      }
+    const k = data.selected.size;
+    if (k > 0 && k < N && sdRest > 0) {
+      const chose = students.map((s) => data.selected.has(keyOf(s)));
+      const meanChose = mean(rest.filter((_, i) => chose[i]));
+      const meanOther = mean(rest.filter((_, i) => !chose[i]));
+      const p = k / N;
+      r_pb = ((meanChose - meanOther) / sdRest) * Math.sqrt(p * (1 - p));
     }
 
-    const isFunctional =
-      option !== "Blank/Other" && option !== masterCorrect && p_ij >= 0.05;
+    const isCorrect = meta.accepted.includes(option);
+    const isFunctional = option !== "Blank/Other" && !isCorrect && p_ij >= 0.05;
 
     return {
       questionNumber: masterQ,
       option,
-      isCorrect: option === masterCorrect,
+      isCorrect,
       p_ij,
       D_ij,
       r_pb,
@@ -2436,31 +2422,43 @@ function computeOptionStatistics(
  * Put every answer in MASTER question order before the comprehensive analysis
  * (fix for P2: item statistics used to be computed per version position).
  *
- * First checks that, for every version that has students, the item-analysis
- * rows map master questions 1..K one-to-one onto positions 1..K, each with a
- * valid option permutation and correct letter, and that the versions agree on
- * each question's master key. Throws a clear error otherwise, rather than
- * producing a partial or mixed report.
+ * First checks, for every version that has students:
+ * - the exam has at least 2 questions (P8);
+ * - the item-analysis rows map master questions 1..K one-to-one onto positions
+ *   1..K, each with a valid option permutation (A..n, 2 <= n <= 5) and a single
+ *   correct letter that the version's solution row accepts;
+ * - the solution rows exist, agree, and accept only real options;
+ * - every student row has every mapped question.
+ * Across those versions, each master question must have the same number of
+ * options and the same accepted answers in master letters (P6, P7): the
+ * comprehensive report pools versions, so it needs one key per question.
+ * Throws a clear error otherwise, rather than producing a partial or mixed report.
  *
  * Returns copies (the inputs are not modified; row order is kept):
  * - rows: in each mapped version, column "m" holds the answer to master
  *   question m. Solution rows are reordered the same way and keep their full
  *   accepted-answer cell. Answer letters stay version letters.
  * - mappings: order := order_in_master. Option permutations are unchanged.
+ * - masters: per master question (index m - 1), its accepted answers and option count.
  */
 function projectToMasterOrder(
   answersData: ExamRow[],
   itemAnalysisData: ItemAnalysisRow[],
   K: number
-): { rows: ExamRow[]; mappings: ItemAnalysisRow[] } {
+): { rows: ExamRow[]; mappings: ItemAnalysisRow[]; masters: MasterMeta[] } {
   const fail = (message: string): never => {
     throw new Error(`Comprehensive analysis cannot run: ${message}`);
   };
   const codeOf = (value: unknown) => String(value ?? "").trim();
   const LETTERS = "ABCDE";
 
+  if (!Number.isInteger(K) || K < 2) {
+    fail(`it needs at least 2 questions (found ${K}). With one question, item statistics and KR-20 are not defined.`);
+  }
+
   const studentRows = answersData.filter((row) => !isSolutionRow(row));
   const solutionRows = answersData.filter((row) => isSolutionRow(row));
+  if (studentRows.length === 0) fail("the student file has no students.");
 
   // The per-item helpers look students up by (ID, Code), so each pair must be unique
   const seen = new Set<string>();
@@ -2474,7 +2472,7 @@ function projectToMasterOrder(
 
   const activeCodes = Array.from(new Set(studentRows.map((row) => codeOf(row.Code))));
   const positionsByCode = new Map<string, Map<number, number>>(); // code -> master -> position
-  const masterKey = new Map<number, { letter: string; code: string }>();
+  const masterMeta = new Map<number, MasterMeta & { key: string; code: string }>();
 
   for (const code of activeCodes) {
     const solutions = solutionRows.filter((row) => codeOf(row.Code) === code);
@@ -2485,6 +2483,7 @@ function projectToMasterOrder(
 
     const byMaster = new Map<number, number>();
     const byPosition = new Map<number, number>();
+    const mapping = new Map<number, { perm: string; correct: string }>();
     for (const ia of entries) {
       const master = Number(ia.order_in_master);
       const position = Number(ia.order);
@@ -2516,12 +2515,7 @@ function projectToMasterOrder(
       if (correct.length !== 1 || index < 0 || index >= n) {
         fail(`version ${code}, master Q${master}: the correct answer "${ia.correct ?? ""}" is missing or not one of its ${n} options.`);
       }
-      const letter = perm[index];
-      const known = masterKey.get(master);
-      if (known && known.letter !== letter) {
-        fail(`master Q${master}: versions ${known.code} and ${code} give different correct answers (master options ${known.letter} and ${letter}).`);
-      }
-      masterKey.set(master, { letter, code });
+      mapping.set(master, { perm, correct });
     }
 
     for (let m = 1; m <= K; m++) {
@@ -2551,6 +2545,38 @@ function projectToMasterOrder(
         }
       }
     }
+
+    // The working key of every master question, in master letters (P6, P7)
+    for (let m = 1; m <= K; m++) {
+      const p = byMaster.get(m)!;
+      const { perm, correct } = mapping.get(m)!;
+      const n = perm.length;
+      const cell = String(solutions[0][String(p)] ?? "").trim();
+      const accepted = Array.from(new Set(parseSolutionCell(cell)));
+      if (accepted.length === 0) {
+        fail(`version ${code}, master Q${m}: the solution row has no answer for question ${p}.`);
+      }
+      for (const letter of accepted) {
+        if (LETTERS.indexOf(letter) >= n) {
+          fail(`version ${code}, master Q${m}: the solution row accepts "${letter}", which is not one of its ${n} options.`);
+        }
+      }
+      if (!accepted.includes(correct as AnswerChoice)) {
+        fail(`version ${code}, master Q${m}: the item analysis file's correct answer "${correct}" is not accepted by the solution row ("${cell}").`);
+      }
+      const masterAccepted = accepted.map((letter) => perm[LETTERS.indexOf(letter)]).sort();
+      const key = masterAccepted.join("");
+      const known = masterMeta.get(m);
+      if (known && known.options !== n) {
+        fail(`master Q${m}: versions ${known.code} and ${code} give it different numbers of options (${known.options} and ${n}).`);
+      }
+      if (known && known.key !== key) {
+        fail(
+          `master Q${m}: versions ${known.code} and ${code} accept different answers (master options ${known.key} and ${key}). Make the answer keys agree in Step 2, or analyse those versions separately.`
+        );
+      }
+      masterMeta.set(m, { accepted: masterAccepted, options: n, key, code });
+    }
     positionsByCode.set(code, byMaster);
   }
 
@@ -2571,7 +2597,11 @@ function projectToMasterOrder(
     ...(ia.permutation !== undefined ? { permutation: String(ia.permutation).trim().toUpperCase() } : {}),
     ...(ia.correct !== undefined ? { correct: String(ia.correct).trim().toUpperCase() } : {}),
   }));
-  return { rows, mappings };
+  const masters = Array.from({ length: K }, (_, i) => {
+    const { accepted, options } = masterMeta.get(i + 1)!;
+    return { accepted, options };
+  });
+  return { rows, mappings, masters };
 }
 
 /**
@@ -2584,7 +2614,7 @@ export function computeComprehensiveItemAnalysis(
   originalItemAnalysisData: ItemAnalysisRow[],
   numQuestions: number
 ): import("@/types/exam").ComprehensiveItemAnalysisResult {
-  const { rows: answersData, mappings: itemAnalysisData } = projectToMasterOrder(
+  const { rows: answersData, mappings: itemAnalysisData, masters } = projectToMasterOrder(
     originalAnswersData,
     originalItemAnalysisData,
     numQuestions
@@ -2599,6 +2629,26 @@ export function computeComprehensiveItemAnalysis(
 
   // Classify students into quartiles
   const rankedStudents = classifyStudentsByQuartile(studentResults);
+
+  // Lookups for the option-level helpers
+  const pairKey = (a: unknown, b: unknown) => `${a}\u0000${b}`;
+  const rowByStudent = new Map(
+    answersData.filter((row) => !isSolutionRow(row)).map((row) => [pairKey(row.Code, row.ID), row])
+  );
+  const mappingByMaster = new Map(itemAnalysisData.map((ia) => [pairKey(ia.code, ia.order_in_master), ia]));
+  /** The student's choice on master question m, as a master letter (or Blank/Other). */
+  const choiceOf: ChoiceOf = (student, m) => {
+    const row = rowByStudent.get(pairKey(student.Code, student.ID));
+    const mapping = mappingByMaster.get(pairKey(student.Code, m));
+    if (!row || !mapping?.permutation) return null;
+    return decodePermutation(String(row[String(mapping.order)] ?? ""), mapping.permutation);
+  };
+  /** Total score minus this item's points, under the full working key (P9). */
+  const restScoreOf: RestScoreOf = (student, m) => {
+    const answer = rowByStudent.get(pairKey(student.Code, student.ID))?.[String(m)];
+    const accepted = correctMap[String(student.Code)]?.[m - 1] ?? [];
+    return student.Tot - (accepted.some((ca) => ca === answer) ? POINTS_PER_Q : 0);
+  };
 
   // Calculate item-level metrics
   const itemProportions = computeItemDifficulty(
@@ -2633,13 +2683,8 @@ export function computeComprehensiveItemAnalysis(
     const D_i = discriminationIndices[i];
     const r_pb = pointBiserials[i];
 
-    // Calculate distractor efficiency for this item
-    const DE = computeDistractorEfficiencyPerItem(
-      rankedStudents,
-      answersData,
-      itemAnalysisData,
-      masterQ
-    );
+    // Calculate distractor efficiency for this item (null when there are no distractors)
+    const DE = computeDistractorEfficiencyPerItem(rankedStudents, masterQ, masters[i], choiceOf);
 
     // Determine decision
     const { decision, reason } = determineItemDecision(p_i, r_pb, D_i, DE);
@@ -2655,13 +2700,7 @@ export function computeComprehensiveItemAnalysis(
     });
 
     // Compute option-level statistics
-    const optionStats = computeOptionStatistics(
-      rankedStudents,
-      answersData,
-      itemAnalysisData,
-      masterQ
-    );
-    allOptionStatistics.push(...optionStats);
+    allOptionStatistics.push(...computeOptionStatistics(rankedStudents, masterQ, masters[i], choiceOf, restScoreOf));
   }
 
   // Calculate test summary

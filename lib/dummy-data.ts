@@ -14,7 +14,7 @@
  */
 import * as XLSX from "xlsx";
 
-export const GENERATOR_VERSION = "2";
+export const GENERATOR_VERSION = "3";
 export const POINTS_PER_QUESTION = 5; // the app's uniform default (types/exam.ts)
 
 export type Letter = "A" | "B" | "C" | "D" | "E";
@@ -562,6 +562,14 @@ export interface ExpectedResults {
     D: number;
     /** Pearson correlation of correct (0/1) with the rest score (items correct minus this item); 0 when either is constant. */
     rpb: number;
+    /** Accepted answers (master letters) under `itemStatisticsKey`. */
+    accepted: Letter[];
+    /** Real options A..n. */
+    options: number;
+    /** Distractor efficiency: functional distractors (chosen by >= 5% of all students) / distractors x 100; null when there are none. */
+    DE: number | null;
+    /** Options A..n then Blank/Other: count, flags, rest-score r_pb, and counts per quartile score group T1..T4. */
+    optionRows: { option: string; count: number; isCorrect: boolean; isFunctional: boolean; rpb: number; T: [number, number, number, number] }[];
   }[];
   /** Key used for masterQuestions p/D/rpb, versionAverages and reliability. */
   itemStatisticsKey: KeyKind;
@@ -574,7 +582,7 @@ const PLANT_SIGNAL: Record<PlantKind, string> = {
   miskey: "Strong students avoid the published key: negative discrimination, typically INVESTIGATE. Re-grading with the corrected key fixes it.",
   "too-easy": "Very high difficulty index (p near 1): typically REVISE as too easy.",
   "dead-distractors": "Two options never chosen: distractor efficiency at most 50%, typically REVISE.",
-  "two-answers": "Two accepted answers; both score. Option analysis reports only one of them as correct.",
+  "two-answers": "Two accepted answers; both score, and the option analysis marks both as correct (since v1.9.1).",
   "low-discrimination": "Discrimination near zero: typically REVISE for weak discrimination (sign may vary with the seed).",
 };
 
@@ -628,9 +636,46 @@ export function expectedResults(ds: DummyDataset, statsKey: KeyKind = "published
     return pearson(xs, xs.map((x, i) => itemsCorrect[i] - x));
   };
 
+  // Quartile score groups: nominal ends ceil(25/50/75% of N) give the cutoff scores;
+  // each student takes the highest group whose cutoff they reach (ties stay together)
+  const desc = [...itemsCorrect].sort((a, b) => b - a);
+  const cutAt = (fraction: number) => desc[Math.ceil(students.length * fraction) - 1];
+  const cuts = students.length ? [cutAt(0.25), cutAt(0.5), cutAt(0.75)] : [];
+  const group = itemsCorrect.map((t) => (t >= cuts[0] ? 0 : t >= cuts[1] ? 1 : t >= cuts[2] ? 2 : 3));
+
+  const optionRowsOf = (q: DummyQuestion) => {
+    const accepted = keyOf(q, statsKey);
+    const optionLetters = LETTERS.slice(0, q.options) as string[];
+    const xs = students.map((s) => (isCorrect(s, q.master, statsKey) ? 1 : 0));
+    const rest = xs.map((x, i) => itemsCorrect[i] - x);
+    const chosen = (s: DummyStudent) => {
+      const r = s.responses[q.master - 1];
+      return r !== "" && optionLetters.includes(r) ? r : "Blank/Other";
+    };
+    return [...optionLetters, "Blank/Other"].map((option) => {
+      const sel = students.map((s) => (chosen(s) === option ? 1 : 0));
+      const count = sel.reduce((a: number, b) => a + b, 0);
+      const T: [number, number, number, number] = [0, 0, 0, 0];
+      sel.forEach((v, i) => {
+        if (v) T[group[i]]++;
+      });
+      const isCorrectOption = (accepted as string[]).includes(option);
+      return {
+        option,
+        count,
+        isCorrect: isCorrectOption,
+        isFunctional: option !== "Blank/Other" && !isCorrectOption && count >= 0.05 * students.length,
+        rpb: pearson(sel, rest),
+        T,
+      };
+    });
+  };
+
   const masterQuestions = exam.questions.map((q) => {
     const answered = students.filter((s) => s.responses[q.master - 1] !== "").length;
     const correct = students.filter((s) => isCorrect(s, q.master, statsKey)).length;
+    const optionRows = optionRowsOf(q);
+    const distractors = optionRows.filter((o) => o.option !== "Blank/Other" && !o.isCorrect);
     return {
       master: q.master,
       answered,
@@ -641,6 +686,10 @@ export function expectedResults(ds: DummyDataset, statsKey: KeyKind = "published
       p: correct / students.length,
       D: share(upper, q.master) - share(lower, q.master),
       rpb: restCorrelation(q.master),
+      accepted: keyOf(q, statsKey),
+      options: q.options,
+      DE: distractors.length ? (100 * distractors.filter((o) => o.isFunctional).length) / distractors.length : null,
+      optionRows,
     };
   });
 

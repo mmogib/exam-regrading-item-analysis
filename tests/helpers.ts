@@ -1,6 +1,6 @@
 import * as XLSX from "xlsx";
 import { vi } from "vitest";
-import { isSolutionRow } from "@/lib/excel-utils";
+import { applyCodeBinding, bindVersionCodes, isSolutionRow } from "@/lib/excel-utils";
 import type { ExamRow, ItemAnalysisRow } from "@/types/exam";
 
 /** Build an ExamRow with question columns "1".."n" from an answer list. */
@@ -80,41 +80,22 @@ export function captureLinkDownloads() {
 }
 
 /**
- * Apply the same code mapping the Step 3 UI suggests when item-analysis codes
- * differ from student codes: pair both code lists sorted numerically-then-
- * alphabetically, by position (see step3-upload-item-analysis.tsx).
+ * Bind item-analysis codes to student codes exactly as Step 3 does, using the
+ * production binder (bindVersionCodes, P12): exact sets pass through, a unique
+ * all-digit match by number is applied, and otherwise the mapping screen's
+ * suggestion is accepted. (The name is historical: binding is no longer only
+ * by position.)
  */
 export function mapCodesByPosition(
   itemAnalysis: ItemAnalysisRow[],
   studentData: ExamRow[]
 ): ItemAnalysisRow[] {
-  const sortCodes = (codes: string[]) =>
-    [...codes].sort((a, b) => {
-      const numA = parseInt(a);
-      const numB = parseInt(b);
-      if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
-      if (!isNaN(numA)) return -1;
-      if (!isNaN(numB)) return 1;
-      return a.localeCompare(b);
-    });
-
-  const answerCodes = sortCodes(
-    Array.from(
-      new Set(studentData.filter((r) => !isSolutionRow(r)).map((r) => String(r.Code).trim()))
-    )
-  );
-  const itemCodes = sortCodes(
-    Array.from(new Set(itemAnalysis.map((ia) => String(ia.code).trim())))
-  );
-
-  const reverse: Record<string, string> = {};
-  for (let i = 0; i < Math.min(answerCodes.length, itemCodes.length); i++) {
-    reverse[itemCodes[i]] = answerCodes[i];
-  }
-  return itemAnalysis.map((ia) => ({
-    ...ia,
-    code: reverse[String(ia.code).trim()] || ia.code,
-  }));
+  const studentCodes = studentData.filter((r) => !isSolutionRow(r)).map((r) => String(r.Code).trim());
+  const binding = bindVersionCodes(studentCodes, itemAnalysis.map((ia) => String(ia.code).trim()));
+  if (binding.kind === "exact") return itemAnalysis;
+  if (binding.kind === "numeric") return applyCodeBinding(itemAnalysis, binding.itemToStudent);
+  const reverse = new Map([...binding.suggestion].map(([student, item]) => [item, student]));
+  return applyCodeBinding(itemAnalysis, reverse);
 }
 
 /**

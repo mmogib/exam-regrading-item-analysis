@@ -15,6 +15,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Sessions saved by earlier versions keep their student data (including a corrected key), but need the item analysis file uploaded again.
 - Step 1's column-mapping hint now describes solution rows correctly (ID 0 with the version's real code).
 - Step 3's answer-mismatch message says "the item analysis file says …" instead of "QUESTIONS_MAP says …", which was wrong for Options Matrix and other formats.
+- **Questions with more than one accepted answer.** Distractor efficiency and the option table now take the correct answers from the answer key, including answers added in Step 2. Before this, a second accepted answer was counted as a distractor. The comprehensive analysis now stops with a clear error if versions accept different answers for the same question.
+- **Questions with fewer than five options.** Distractor efficiency counts only the real options, and the option table lists only them. Before this, it always assumed four distractors. When every option is accepted, distractor efficiency shows **N/A** and the distractor rules are skipped in the decision.
+- **One-question exams.** The comprehensive analysis needs at least 2 questions, so it now explains that instead of showing KR-20 as NaN.
+- **Options Matrix files:**
+  - files whose first row has an empty cell, for example a blank Master_Correct, are now recognised;
+  - custom version names such as `A_Q` / `A_Opt` are now read;
+  - malformed matrices (missing, repeated or out-of-range options or letters, positions that differ) are rejected with a clear message instead of being padded.
+- **Version codes.**
+  - Item analysis files keep codes exactly as written; only all-digit codes are read as numbers, so `1A` and `1B` stay distinct.
+  - Step 3 now matches codes like `1` and `001` by itself when every code has exactly one match, so the code-mapping screen appears only when a choice is needed.
+  - The suggested mapping no longer depends on the order of the rows.
+
+### Changed
+- **Option point-biserial** (option table) now uses the same rest score as the item point-biserial (the total without that question). For a question with one accepted answer, the correct option's value equals the item's.
+- **Score groups T1–T4.** Students with the same total are always in the same group: a tie at a boundary goes to the higher group, so groups can be unequal or empty. Before this, a tie could be split. The top and bottom 27% groups used for D are unchanged.
+- The help and the Excel guide explain both, and N/A.
 
 ### To Consider
 - Template download buttons in wizard steps

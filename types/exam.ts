@@ -100,7 +100,7 @@ export interface ItemStatistics {
   p_i: number;                       // Item difficulty (proportion correct)
   D_i: number;                       // Upper-lower discrimination index
   r_pb: number;                      // Point-biserial correlation (item-level)
-  DE: number;                        // Distractor efficiency (0-100%)
+  DE: number | null;                 // Distractor efficiency (0-100%); null (N/A) when every option is accepted
   decision: ItemDecision;            // Keep/Revise/Investigate
   decisionReason?: string;           // Why this decision was made
 }

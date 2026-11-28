@@ -59,14 +59,15 @@ describe("parseWideFormat (Options Matrix), hand-checked permutations", () => {
   ];
 
   it("builds version->master permutations and maps the correct answer per version", () => {
-    // Permutation string is indexed by the VERSION letter and gives the MASTER letter.
+    // Permutation string is indexed by the VERSION letter and gives the MASTER letter,
+    // with one letter per real option (P7: no padding to five).
     // Q1 v2: version A=master B, B=C, C=A  -> "BCADE"; master B appears as version "A".
-    // Q2 v2: version A=master B, B=A      -> "BACDE"; master A appears as version "B".
+    // Q2 (two options) v2: version A=master B, B=A -> "BA"; master A appears as version "B".
     expect(parseWideFormat(wide, columns)).toEqual([
       { code: 1, order: 1, order_in_master: 1, permutation: "ABCDE", correct: "B" },
       { code: 2, order: 3, order_in_master: 1, permutation: "BCADE", correct: "A" },
-      { code: 1, order: 2, order_in_master: 2, permutation: "ABCDE", correct: "A" },
-      { code: 2, order: 1, order_in_master: 2, permutation: "BACDE", correct: "B" },
+      { code: 1, order: 2, order_in_master: 2, permutation: "AB", correct: "A" },
+      { code: 2, order: 1, order_in_master: 2, permutation: "BA", correct: "B" },
     ]);
   });
 
@@ -78,10 +79,14 @@ describe("parseWideFormat (Options Matrix), hand-checked permutations", () => {
   it("accepts sequential versions that do not start at 1", () => {
     const cols = ["Q", "Option", "Master_Correct", "version_5_Q", "version_5_Opt", "version_6_Q", "version_6_Opt"];
     const rows = parseWideFormat(
-      [{ Q: 1, Option: "A", Master_Correct: "YES", version_5_Q: 1, version_5_Opt: "A", version_6_Q: 1, version_6_Opt: "A" }],
+      [
+        { Q: 1, Option: "A", Master_Correct: "YES", version_5_Q: 1, version_5_Opt: "A", version_6_Q: 1, version_6_Opt: "B" },
+        { Q: 1, Option: "B", Master_Correct: "", version_5_Q: 1, version_5_Opt: "B", version_6_Q: 1, version_6_Opt: "A" },
+      ],
       cols
     );
     expect(rows.map((r) => r.code)).toEqual([5, 6]);
+    expect(rows.map((r) => r.permutation)).toEqual(["AB", "BA"]);
   });
 });
 
@@ -126,9 +131,10 @@ describe("CSV format detection through FileReader + SheetJS", () => {
     expect(await detect("a,b\n1,2\n")).toBe("UNKNOWN");
   });
 
-  it("reads numeric-looking codes as numbers", async () => {
-    const { data } = await readCSVFileWithDetection(makeFile("Version,Version Q#,Master Q#\n001,1,2\n", "ia.csv"));
-    expect(data[0]).toEqual({ Version: 1, "Version Q#": 1, "Master Q#": 2 });
+  it("keeps cell text as written; Step 3 then reads all-digit codes as numbers (P12)", async () => {
+    const { data, format } = await readCSVFileWithDetection(makeFile("Version,Version Q#,Master Q#\n001,1,2\n1A,1,2\n", "ia.csv"));
+    expect(data[0]).toEqual({ Version: "001", "Version Q#": "1", "Master Q#": "2" });
+    expect(normalizeItemAnalysis(data, format as "NEW").map((r) => r.code)).toEqual([1, "1A"]);
   });
 
   it("readCSVFile parses a WIDE file end to end", async () => {
@@ -139,24 +145,24 @@ describe("CSV format detection through FileReader + SheetJS", () => {
       "1,B,,1,B,3,A",
       "1,C,,1,C,3,B",
     ].join("\n");
-    // Version 2: version A=master B, B=C, C=A -> "BCADE"; master A appears as version "C"
+    // Three options. Version 2: version A=master B, B=C, C=A -> "BCA"; master A appears as version "C"
     expect(await readCSVFile(makeFile(csv, "wide.csv"))).toEqual([
-      { code: 1, order: 1, order_in_master: 1, permutation: "ABCDE", correct: "A" },
-      { code: 2, order: 3, order_in_master: 1, permutation: "BCADE", correct: "C" },
+      { code: 1, order: 1, order_in_master: 1, permutation: "ABC", correct: "A" },
+      { code: 2, order: 3, order_in_master: 1, permutation: "BCA", correct: "C" },
     ]);
   });
 
-  // KNOWN ISSUE (pre-existing, see references/UPGRADE_PLAN.md findings): format
-  // detection reads column names from the first data row only, and SheetJS omits
-  // blank cells, so a WIDE file whose first row has an empty Master_Correct is
-  // detected as UNKNOWN. `it.fails` passes while the bug exists; once fixed, this
-  // test will start failing and should be turned into a normal test.
-  it.fails("KNOWN ISSUE: detects WIDE when the first row's Master_Correct is blank", async () => {
-    const csv = [
-      "Q,Option,Master_Correct,version_1_Q,version_1_Opt",
-      "1,A,,1,A",
-      "1,B,YES,1,B",
-    ].join("\n");
-    expect((await readCSVFileWithDetection(makeFile(csv, "wide.csv"))).format).toBe("WIDE");
+  // P3 (fixed in 1.9.1): the column names come from the header row, so a blank
+  // Master_Correct in the first data row no longer hides that column.
+  it("detects WIDE when the first row's Master_Correct is blank, with the same mapping", async () => {
+    const blankFirst = ["Q,Option,Master_Correct,version_1_Q,version_1_Opt", "1,A,,1,B", "1,B,YES,1,A"].join("\n");
+    const flagFirst = ["Q,Option,Master_Correct,version_1_Q,version_1_Opt", "1,B,YES,1,A", "1,A,,1,B"].join("\n");
+    const detection = await readCSVFileWithDetection(makeFile(blankFirst, "wide.csv"));
+    expect(detection.format).toBe("WIDE");
+    expect(detection.columns).toContain("Master_Correct");
+    expect(await readCSVFile(makeFile(blankFirst, "wide.csv"))).toEqual(await readCSVFile(makeFile(flagFirst, "wide2.csv")));
+    expect(await readCSVFile(makeFile(blankFirst, "wide.csv"))).toEqual([
+      { code: 1, order: 1, order_in_master: 1, permutation: "BA", correct: "A" },
+    ]);
   });
 });

@@ -29,6 +29,8 @@ import {
   parseWideFormat,
   validateCorrectAnswers,
   isSolutionRow,
+  bindVersionCodes,
+  applyCodeBinding,
 } from "@/lib/excel-utils";
 import {
   generateItemAnalysisNormalTemplate,
@@ -60,6 +62,7 @@ export function Step3UploadItemAnalysis() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
+  const [codeNote, setCodeNote] = useState<string | null>(null);
   const [csvDetection, setCsvDetection] = useState<CSVDetectionResult | null>(
     null
   );
@@ -115,6 +118,7 @@ export function Step3UploadItemAnalysis() {
     setLoading(true);
     setError(null);
     setWarning(null);
+    setCodeNote(null);
     setUploadedFile(null);
 
     try {
@@ -174,71 +178,44 @@ export function Step3UploadItemAnalysis() {
     }
   };
 
+  /**
+   * Bind the item-analysis codes to the student codes (P12, bindVersionCodes):
+   * exact matches pass through; all-digit codes that match one to one by number
+   * (1 = 001) are rebound to the student codes, with a note; anything else opens
+   * the code-mapping screen. Returns the rows to validate, or null while the
+   * mapping screen waits for the user.
+   */
   const checkCodeMismatch = (
     parsedData: ItemAnalysisRow[],
     hasPerm: boolean,
     fileName: string,
     revision: number
-  ) => {
-    // Get codes from student data (from Step 1)
+  ): ItemAnalysisRow[] | null => {
     const students = state.studentData!.filter((row) => !isSolutionRow(row));
-    const answerCodes = Array.from(new Set(students.map((s) => s.Code)));
+    const answerCodes = students.map((s) => String(s.Code).trim());
+    const itemCodes = parsedData.map((ia) => String(ia.code).trim());
+    const binding = bindVersionCodes(answerCodes, itemCodes);
 
-    // Get codes from item analysis
-    const itemCodes = Array.from(
-      new Set(parsedData.map((ia) => String(ia.code)))
-    );
+    if (binding.kind === "exact") return parsedData;
 
-    // Normalize codes: trim whitespace
-    const normalizeCode = (code: string) => String(code).trim();
-    const normalizedAnswerCodes = answerCodes.map(normalizeCode);
-    const normalizedItemCodes = itemCodes.map(normalizeCode);
-
-    // Sort codes: numeric first (by value), then alphabetic
-    const sortCodes = (codes: string[]) => {
-      return [...codes].sort((a, b) => {
-        const numA = parseInt(a);
-        const numB = parseInt(b);
-        if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
-        if (!isNaN(numA)) return -1;
-        if (!isNaN(numB)) return 1;
-        return a.localeCompare(b);
-      });
-    };
-
-    const sortedAnswerCodes = sortCodes(normalizedAnswerCodes);
-    const sortedItemCodes = sortCodes(normalizedItemCodes);
-
-    // Check if codes match exactly
-    const codesMatch =
-      sortedAnswerCodes.length === sortedItemCodes.length &&
-      sortedAnswerCodes.every((code, idx) => code === sortedItemCodes[idx]);
-
-    if (!codesMatch) {
-      // Create suggested mapping by position
-      const suggested: { [key: string]: string } = {};
-      const minLength = Math.min(
-        sortedAnswerCodes.length,
-        sortedItemCodes.length
-      );
-
-      for (let i = 0; i < minLength; i++) {
-        suggested[sortedAnswerCodes[i]] = sortedItemCodes[i];
-      }
-
-      // Store temp data and show code mapping UI
-      setTempItemAnalysisData(parsedData);
-      setTempHasPermutation(hasPerm);
-      setTempFileName(fileName);
-      setTempRevision(revision);
-      setCodeMapping(suggested);
-      setItemAnalysisCodes(sortedItemCodes);
-      setUsedCodes(sortedAnswerCodes);
-      setShowCodeMappingUI(true);
-      return false; // Not ready to complete
+    if (binding.kind === "numeric") {
+      const pairs = [...binding.itemToStudent.entries()]
+        .map(([item, student]) => `${item} = ${student}`)
+        .join(", ");
+      setCodeNote(`Version codes matched by number: ${pairs}.`);
+      return applyCodeBinding(parsedData, binding.itemToStudent);
     }
 
-    return true; // Codes match, ready to complete
+    // Store temp data and show code mapping UI
+    setTempItemAnalysisData(parsedData);
+    setTempHasPermutation(hasPerm);
+    setTempFileName(fileName);
+    setTempRevision(revision);
+    setCodeMapping(Object.fromEntries(binding.suggestion));
+    setItemAnalysisCodes(binding.itemCodes);
+    setUsedCodes(binding.studentCodes);
+    setShowCodeMappingUI(true);
+    return null; // Not ready to complete
   };
 
   const processItemAnalysis = async (
@@ -274,12 +251,13 @@ export function Step3UploadItemAnalysis() {
       );
     }
 
-    // Check for code mismatch FIRST (before validation)
-    const codesMatch = checkCodeMismatch(parsedData, hasPerm, fileName, revision);
-    if (!codesMatch) {
+    // Bind the codes FIRST (before validation)
+    const bound = checkCodeMismatch(parsedData, hasPerm, fileName, revision);
+    if (!bound) {
       // Code mapping UI is shown, wait for user confirmation
       return;
     }
+    parsedData = bound;
 
     // Codes match - now validate correct answers
     const validationError = validateCorrectAnswers(
@@ -304,22 +282,13 @@ export function Step3UploadItemAnalysis() {
     }
 
     // Apply code mapping
-    const reverseMapping: { [itemCode: string]: string } = {};
+    const reverseMapping = new Map<string, string>();
     Object.entries(codeMapping).forEach(([answerCode, itemCode]) => {
-      const normalizedItemCode = String(itemCode).trim();
-      const normalizedAnswerCode = String(answerCode).trim();
-      reverseMapping[normalizedItemCode] = normalizedAnswerCode;
+      reverseMapping.set(String(itemCode).trim(), String(answerCode).trim());
     });
 
     // Map item analysis codes to match answer codes
-    const mappedItemAnalysis = tempItemAnalysisData.map((ia) => {
-      const normalizedIaCode = String(ia.code).trim();
-      const mappedCode = reverseMapping[normalizedIaCode];
-      return {
-        ...ia,
-        code: mappedCode || ia.code,
-      };
-    });
+    const mappedItemAnalysis = applyCodeBinding(tempItemAnalysisData, reverseMapping);
 
     // Validate correct answers AFTER mapping codes
     const validationError = validateCorrectAnswers(
@@ -570,6 +539,14 @@ export function Step3UploadItemAnalysis() {
               <AlertDescription className="whitespace-pre-wrap">
                 {error}
               </AlertDescription>
+            </Alert>
+          )}
+
+          {codeNote && (
+            <Alert>
+              <Info className="h-4 w-4" />
+              <AlertTitle>Version codes matched</AlertTitle>
+              <AlertDescription>{codeNote}</AlertDescription>
             </Alert>
           )}
 
