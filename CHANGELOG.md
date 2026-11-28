@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - An item analysis file whose check finishes after the student data changed is no longer accepted.
   - A Step 1 read that finishes after leaving Step 1 is ignored.
   - Sessions saved by earlier versions keep their student data (including a corrected key), but need the item analysis file uploaded again.
+  - Starting over also cancels pending student imports and mapping drafts. Uploading a new item-analysis file invalidates older pending reads and mappings, so they cannot replace the newer accepted file.
 - Step 1's column-mapping hint now describes solution rows correctly (ID 0 with the version's real code).
 - Step 3's answer-mismatch message says "the item analysis file says …" instead of "QUESTIONS_MAP says …", which was wrong for Options Matrix and other formats.
 - **Questions with more than one accepted answer.** Distractor efficiency and the option table now take the correct answers from the answer key, including answers added in Step 2. Before this, a second accepted answer was counted as a distractor. The comprehensive analysis now stops with a clear error if versions accept different answers for the same question.
@@ -26,6 +27,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Item analysis files keep codes exactly as written; only all-digit codes are read as numbers, so `1A` and `1B` stay distinct.
   - Step 3 now matches codes like `1` and `001` by itself when every code has exactly one match, so the code-mapping screen appears only when a choice is needed.
   - The suggested mapping no longer depends on the order of the rows.
+  - Distinct source codes such as 01 and 1 that would normalize to the same numeric identity are rejected before rows can merge.
+- **Compound student marks.** Comprehensive analysis rejects compound student marks such as AB; correct them to a single response before analysis. (Grading is unchanged: it counts the first letter.)
 
 ### Changed
 - **Option point-biserial** (option table) now uses the same rest score as the item point-biserial (the total without that question). For a question with one accepted answer, the correct option's value equals the item's.

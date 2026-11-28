@@ -128,7 +128,7 @@ export function ComprehensiveResults({ results, onDownload }: ComprehensiveResul
                       </div>
                       <div>
                         <span className="font-semibold">Discrimination (D_i):</span>
-                        <p className="text-muted-foreground">Difference between top 27% and bottom 27%.</p>
+                        <p className="text-muted-foreground">Difference between the top and bottom groups of ceil(27% × N) students each. Equal totals keep their row order; in very small classes the groups can overlap.</p>
                         <p className="text-xs text-muted-foreground mt-1">
                           Ideal: ≥0.20 | Negative = Problem (low scorers do better)
                         </p>
@@ -356,11 +356,11 @@ export function ComprehensiveResults({ results, onDownload }: ComprehensiveResul
             <br />
             <strong>r<sub>pb</sub> (Point-Biserial):</strong> Measures if high-scoring students tend to get this question right. Higher = better discrimination.
             <br />
-            <strong>D (Discrimination Index):</strong> Difference between top 27% and bottom 27% performance. Positive = good item.
+            <strong>D (Discrimination Index):</strong> Difference between the top and bottom groups of ceil(27% × N) students each (equal totals keep their row order). Positive = good item.
             <br />
             <strong>DE (Distractor Efficiency):</strong> Percentage of wrong answer choices that attract at least 5% of students. Higher = distractors are working. N/A when every option is accepted.
             <br />
-            <strong>T1–T4:</strong> score groups from the top (T1) to the bottom (T4), nominally a quarter each. Students with the same total are always in the same group (a tie goes to the higher group), so groups can be unequal or empty.
+            <strong>T1–T4:</strong> score groups from the top (T1) to the bottom (T4). The nominal ends ceil(25%, 50%, 75% × N) are computed once, and the scores at those positions are the cutoffs; each student enters the highest group whose cutoff they reach. Equal totals stay together, so groups can be unequal or empty.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -539,7 +539,7 @@ export function ComprehensiveResults({ results, onDownload }: ComprehensiveResul
         <CardHeader className="bg-orange-50 dark:bg-orange-950/30">
           <CardTitle className="text-orange-900 dark:text-orange-100">Detailed Option Analysis</CardTitle>
           <CardDescription className="text-orange-700 dark:text-orange-300">
-            Click each item to view comprehensive option-level statistics. Asterisk (*) indicates correct answer. Negative r_pb or D values for correct answers suggest problems.
+            Click each item to view comprehensive option-level statistics. Asterisk (*) indicates an answer the key accepts. An option&apos;s r_pb correlates choosing that option with the question&apos;s rest score (the total without this question&apos;s points); with one accepted answer, the correct option&apos;s r_pb equals the item&apos;s. Negative r_pb or D values for correct answers suggest problems.
           </CardDescription>
         </CardHeader>
         <CardContent className="pt-6">

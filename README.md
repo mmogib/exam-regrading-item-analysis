@@ -54,12 +54,15 @@ Two types of analysis available:
 - **Interactive tooltips**: Hover over metrics for quick definitions
 - Item difficulty (p-value) and discrimination index (D)
 - Point-biserial correlation (r_pb)
+  - Item r_pb correlates item correctness with the rest score. Option r_pb correlates selecting that option with the same rest score (total minus this item's awarded points). With one accepted answer, its correct option has the item's correlation.
 - Test reliability (KR-20)
 - Distractor efficiency analysis
 - Decision recommendations (KEEP/REVISE/INVESTIGATE)
   - Detailed decision criteria cards (KEEP, REVISE, INVESTIGATE)
   - Example interpretation with explanations
 - Quartile-based distractor analysis (T1-T4)
+  - T1–T4 are score groups. Compute nominal ends ceil(25%, 50%, 75% × N) once and use the scores at those positions as cutoffs. Each student enters the highest group whose cutoff is reached; equal totals stay together, so groups can be unequal or empty.
+  - D uses separate top/bottom groups of ceil(0.27 × N) students. Equal-score ties retain input row order; very small groups can overlap.
 - Option-level statistics for each question
 - Interactive UI with sortable tables and expandable question details
 - Download: `item-analysis-comprehensive.xlsx`

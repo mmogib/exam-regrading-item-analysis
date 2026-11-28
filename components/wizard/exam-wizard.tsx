@@ -77,10 +77,14 @@ export function ExamWizard() {
     }
   };
 
+  // Start Over and Finish remount the steps, so no pending read or draft survives a reset (011 D2)
+  const [resetEpoch, setResetEpoch] = useState(0);
+
   const handleFinish = () => {
     setShowSuccess(true);
     setTimeout(() => {
       resetWizard();
+      setResetEpoch((e) => e + 1);
       setShowSuccess(false);
       setCurrentStep(1);
     }, 3000);
@@ -92,6 +96,7 @@ export function ExamWizard() {
 
   const confirmStartOver = () => {
     resetWizard();
+    setResetEpoch((e) => e + 1);
     setCurrentStep(1);
     setShowResetDialog(false);
   };
@@ -99,13 +104,13 @@ export function ExamWizard() {
   const renderStep = () => {
     switch (state.currentStep) {
       case 1:
-        return <Step1UploadStudentData />;
+        return <Step1UploadStudentData key={`step1-${resetEpoch}`} />;
       case 2:
-        return <Step2Regrading />;
+        return <Step2Regrading key={`step2-${resetEpoch}`} />;
       case 3:
-        return <Step3UploadItemAnalysis />;
+        return <Step3UploadItemAnalysis key={`step3-${resetEpoch}`} />;
       case 4:
-        return <Step4AnalysisResults />;
+        return <Step4AnalysisResults key={`step4-${resetEpoch}`} />;
       default:
         return null;
     }

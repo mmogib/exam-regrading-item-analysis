@@ -787,7 +787,7 @@ All of these predate the upgrade and were found while writing tests or reviewing
   - a required answer cell is missing (`""` is a blank answer).
 - **Normalisation:** the copies carry trimmed codes and trimmed, upper-case permutations and correct letters, so every helper matches them the same way.
 - **What changed and what didn't:** for valid, fully mapped inputs, grades, cross-version analysis, `DE` and the option statistics are unchanged. The per-question statistics, decisions and KR-20 *can* change. A single shuffled version, or versions sharing one shuffled order, were mislabelled too.
-- **Scope:** the checks cover the map's scalar keys. They do not re-check the map against the working key (P6, P11).
+- **Scope:** since 1.9.1, preflight also requires each scalar correct letter to belong to that version's working solution set, and active versions to agree on each master's decoded working accepted set and option count. It also rejects compound student marks such as `AB` (011 D4).
 - **Tests:** in `tests/analysis.test.ts` (hand-checked, including the guards, a single shuffled version, unequal versions and constant items), `tests/export-and-templates.test.ts` (shuffled export) and `tests/dummy-data.test.ts` (against the oracle, which now includes `rpb` and either key).
 - **Review:** channels 004 and 006.
 

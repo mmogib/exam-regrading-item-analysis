@@ -107,17 +107,19 @@ export interface ItemStatistics {
 
 export interface OptionStatistics {
   questionNumber: number;            // Master question number
-  option: string;                    // A, B, C, D, E, or "Blank/Other"
-  isCorrect: boolean;                // Whether this is the correct answer
+  option: string;                    // A..n (the question's real options), plus "Blank/Other"
+  isCorrect: boolean;                // Whether the working key accepts this option
   p_ij: number;                      // Proportion selecting this option
   D_ij: number;                      // Upper-lower discrimination for this option
-  r_pb: number;                      // Point-biserial correlation for this option
+  r_pb: number;                      // Correlation of choosing this option with the item's rest score
   count: number;                     // Total students who chose this
   percentage: number;                // Percentage of students who chose this
-  T1: number;                        // Count from top 25%
-  T2: number;                        // Count from second 25%
-  T3: number;                        // Count from third 25%
-  T4: number;                        // Count from bottom 25%
+  // T1-T4: counts in the corresponding nominal quartile score group; ties stay together,
+  // so groups may be unequal or empty
+  T1: number;
+  T2: number;
+  T3: number;
+  T4: number;
   isFunctional?: boolean;            // Whether this distractor is functional (p_ij >= 0.05)
 }
 

@@ -87,6 +87,11 @@ export function Step3UploadItemAnalysis() {
   const [tempFileName, setTempFileName] = useState("");
   // Student-data revision the pending mapping screen was built for (P11)
   const [tempRevision, setTempRevision] = useState<number | null>(null);
+  // File attempt the pending code-mapping / column-mapping screen belongs to (011 D1)
+  const [tempAttempt, setTempAttempt] = useState<number | null>(null);
+  const [columnDraft, setColumnDraft] = useState<{ attempt: number; revision: number } | null>(null);
+  // Every chosen file is a new attempt; anything from an older attempt is obsolete
+  const attemptRef = useRef(0);
 
   // The latest student-data revision, for work that finishes after a render (P11)
   const latestRevision = useRef(state.studentRevision);
@@ -114,19 +119,29 @@ export function Step3UploadItemAnalysis() {
   }
 
   const handleFileSelect = async (file: File) => {
+    const attempt = ++attemptRef.current;
+    const current = () => attempt === attemptRef.current;
     const revision = state.studentRevision;
     setLoading(true);
     setError(null);
     setWarning(null);
     setCodeNote(null);
     setUploadedFile(null);
+    // A new file cancels any mapping screen still open for an earlier file
+    setShowMappingUI(false);
+    setColumnDraft(null);
+    setShowCodeMappingUI(false);
+    setTempItemAnalysisData(null);
+    setTempAttempt(null);
 
     try {
       const detection = await readCSVFileWithDetection(file);
+      if (!current()) return;
       setCsvDetection(detection);
 
       if (detection.format === "UNKNOWN") {
-        // Show mapping UI
+        // Show mapping UI, bound to this attempt and the revision it was read against
+        setColumnDraft({ attempt, revision });
         setShowMappingUI(true);
         setColumnMapping({
           code: detection.columns[0] || "",
@@ -137,19 +152,20 @@ export function Step3UploadItemAnalysis() {
         // Parse WIDE format first
         const parsedData = parseWideFormat(detection.data, detection.columns);
         logDebug({ WIDE: parsedData });
-        await processItemAnalysis(file.name, parsedData, "WIDE", revision);
+        await processItemAnalysis(file.name, parsedData, "WIDE", revision, attempt);
       } else {
         // Auto-detected format (OLD or NEW) - parse immediately
-        await processItemAnalysis(file.name, detection.data, detection.format, revision);
+        await processItemAnalysis(file.name, detection.data, detection.format, revision, attempt);
       }
     } catch (err: any) {
+      if (!current()) return;
       logError("Error reading item analysis file:", err);
       setError(
         err.message ||
           "Error reading file. Please check the format and try again."
       );
     } finally {
-      setLoading(false);
+      if (current()) setLoading(false);
     }
   };
 
@@ -164,11 +180,17 @@ export function Step3UploadItemAnalysis() {
       return;
     }
 
+    if (!columnDraft || columnDraft.attempt !== attemptRef.current) {
+      setShowMappingUI(false);
+      setError(STALE_MESSAGE);
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
       const parsedData = parseCSVWithMapping(csvDetection.data, columnMapping);
-      await processItemAnalysis("Custom mapped file", parsedData, "MAPPED", state.studentRevision);
+      await processItemAnalysis("Custom mapped file", parsedData, "MAPPED", columnDraft.revision, columnDraft.attempt);
       setShowMappingUI(false);
     } catch (err: any) {
       logError("Error parsing with custom mapping:", err);
@@ -189,7 +211,8 @@ export function Step3UploadItemAnalysis() {
     parsedData: ItemAnalysisRow[],
     hasPerm: boolean,
     fileName: string,
-    revision: number
+    revision: number,
+    attempt: number
   ): ItemAnalysisRow[] | null => {
     const students = state.studentData!.filter((row) => !isSolutionRow(row));
     const answerCodes = students.map((s) => String(s.Code).trim());
@@ -211,6 +234,7 @@ export function Step3UploadItemAnalysis() {
     setTempHasPermutation(hasPerm);
     setTempFileName(fileName);
     setTempRevision(revision);
+    setTempAttempt(attempt);
     setCodeMapping(Object.fromEntries(binding.suggestion));
     setItemAnalysisCodes(binding.itemCodes);
     setUsedCodes(binding.studentCodes);
@@ -222,7 +246,8 @@ export function Step3UploadItemAnalysis() {
     fileName: string,
     data: any[],
     format: string,
-    revision: number
+    revision: number,
+    attempt: number
   ) => {
     let parsedData: ItemAnalysisRow[];
 
@@ -252,7 +277,7 @@ export function Step3UploadItemAnalysis() {
     }
 
     // Bind the codes FIRST (before validation)
-    const bound = checkCodeMismatch(parsedData, hasPerm, fileName, revision);
+    const bound = checkCodeMismatch(parsedData, hasPerm, fileName, revision, attempt);
     if (!bound) {
       // Code mapping UI is shown, wait for user confirmation
       return;
@@ -270,11 +295,16 @@ export function Step3UploadItemAnalysis() {
     }
 
     // Validation passed - complete the step
-    completeStep(parsedData, hasPerm, fileName, revision);
+    completeStep(parsedData, hasPerm, fileName, revision, attempt);
   };
 
   const handleAcceptCodeMapping = () => {
-    if (!tempItemAnalysisData) return;
+    if (!tempItemAnalysisData || tempAttempt === null) return;
+    if (tempAttempt !== attemptRef.current) {
+      // A newer file was chosen since this screen opened
+      setShowCodeMappingUI(false);
+      return;
+    }
     if (tempRevision !== state.studentRevision) {
       setShowCodeMappingUI(false);
       setError(STALE_MESSAGE);
@@ -302,15 +332,18 @@ export function Step3UploadItemAnalysis() {
     }
 
     setShowCodeMappingUI(false);
-    completeStep(mappedItemAnalysis, tempHasPermutation, tempFileName, tempRevision);
+    completeStep(mappedItemAnalysis, tempHasPermutation, tempFileName, tempRevision, tempAttempt);
   };
 
   const completeStep = (
     parsedData: ItemAnalysisRow[],
     hasPerm: boolean,
     fileName: string,
-    revision: number
+    revision: number,
+    attempt: number
   ) => {
+    // A result from an older file attempt never replaces a newer one
+    if (attempt !== attemptRef.current) return;
     if (revision !== latestRevision.current) {
       setError(STALE_MESSAGE);
       return;

@@ -10,18 +10,22 @@ import { createRoot } from "react-dom/client";
 import { saveAs } from "file-saver";
 import {
   applyCodeBinding,
+  applyColumnMapping,
   bindVersionCodes,
   buildCorrectAnswersMap,
   classifyStudentsByQuartile,
   computeComprehensiveItemAnalysis,
+  computeResults,
   exportComprehensiveAnalysisToExcel,
   findVersionPairs,
   getAllQuestionCols,
   normalizeItemAnalysis,
   normalizeVersionCode,
+  parseCSVWithMapping,
   parseWideFormat,
   readCSVFileWithDetection,
   readCsvTable,
+  readExamDataFileWithDetection,
   reviseSolutionRows,
   sortVersionCodes,
   validateCorrectAnswers,
@@ -295,6 +299,59 @@ describe("P7: DE counts real options only", () => {
   });
 });
 
+describe("011: N/A in the results table sorts last both ways, without a percent sign", () => {
+  it("renders N/A only for the item without distractors, and keeps it last when sorting by DE", async () => {
+    // Q1: every option accepted (DE N/A). Q2: B is a functional distractor (DE 100)
+    const all = [examRow("0", "001", ["AB", "A"]), ...["A", "B", "A", "B"].map((a, i) => examRow(`y${i}`, "001", [a, i % 2 ? "A" : "B"]))];
+    const res = computeComprehensiveItemAnalysis(all, [map("001", 1, 1, "AB", "A"), map("001", 2, 2, "AB", "A")], 2);
+    expect(res.itemStatistics.map((s) => s.DE)).toEqual([null, 100]);
+
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    await act(async () => root.render(createElement(ComprehensiveResults, { results: res, onDownload: () => {} })));
+    const itemTable = () => [...container.querySelectorAll("table")].find((t) => t.textContent?.includes("DE (%)"))!;
+    const rowCells = () =>
+      [...itemTable().querySelectorAll("tbody tr")].map((tr) => [...tr.querySelectorAll("td")].map((td) => td.textContent?.trim()));
+    const deColumn = () => {
+      const headers = [...itemTable().querySelectorAll("th")].map((th) => th.textContent ?? "");
+      return headers.findIndex((h) => h.includes("DE (%)"));
+    };
+    const deCells = () => rowCells().map((cells) => [cells[0], cells[deColumn()]]);
+
+    expect(deCells()).toEqual([
+      ["Q1", "N/A"],
+      ["Q2", "100.0%"],
+    ]);
+    const sortByDE = async () => {
+      const th = [...itemTable().querySelectorAll("th")].find((h) => h.textContent?.includes("DE (%)"))!;
+      await act(async () => th.click());
+    };
+    await sortByDE(); // ascending
+    expect(deCells().map((c) => c[0])).toEqual(["Q2", "Q1"]);
+    await sortByDE(); // descending
+    expect(deCells().map((c) => c[0])).toEqual(["Q2", "Q1"]);
+    await act(async () => root.unmount());
+    container.remove();
+  });
+});
+
+describe("011 D4: compound student marks", () => {
+  it("the comprehensive analysis rejects a mark like AB; grading is unchanged", async () => {
+    const csv = "ID,Code,1,2,3\n0,001,A,A,A\ns1,001,AB,A,A\ns2,001,A,A,B\ns3,001,B,B,A\ns4,001,B,B,B\n";
+    const { rawData, detection } = await readExamDataFileWithDetection(makeFile(csv, "c.csv"));
+    const rows = applyColumnMapping(rawData, detection);
+    expect(rows.find((r) => r.ID === "s1")!["1"]).toBe("AB"); // Step 1 keeps it
+    const qCols = getAllQuestionCols(rows).slice(0, 3);
+    // Grading counts the first letter, as before
+    expect(computeResults(rows, qCols, buildCorrectAnswersMap(rows, qCols)).map((g) => g.Tot)).toEqual([15, 10, 5, 0]);
+    const maps = [1, 2, 3].map((q) => map("001", q, q, "ABCDE", "A"));
+    expect(() => computeComprehensiveItemAnalysis(rows, maps, 3)).toThrow(
+      /student "s1" has "AB" for question 1\. The comprehensive analysis needs one response per question/
+    );
+  });
+});
+
 /* ------------------------------------------------------------------ */
 /* P8                                                                  */
 /* ------------------------------------------------------------------ */
@@ -450,6 +507,35 @@ describe("P12: version codes", () => {
     expect(binding.kind).toBe("numeric");
     const bound = applyCodeBinding(parsed, (binding as { itemToStudent: Map<string, string> }).itemToStudent);
     expect(bound.map((b) => `${b.code}:${b.order}->${b.order_in_master}`)).toEqual(["002:1->2", "002:2->1", "001:1->1", "001:2->2"]);
+  });
+
+  it("011 D3: two spellings of one version number are rejected before rows can merge", async () => {
+    const merged = "Version,Version Q#,Master Q#,Permutation,Correct\n01,1,1,ABCDE,A\n1,2,2,ABCDE,A\n";
+    const d = await readCSVFileWithDetection(makeFile(merged, "m.csv"));
+    expect(() => normalizeItemAnalysis(d.data, "NEW")).toThrow(/uses both "01" and "1" as version codes/);
+    const old = await readCSVFileWithDetection(makeFile("code,order,order in master\n01,1,1\n1,2,2\n", "o.csv"));
+    expect(old.format).toBe("OLD");
+    expect(() => normalizeItemAnalysis(old.data, "OLD")).toThrow(/"01" and "1"/);
+    expect(() =>
+      parseCSVWithMapping(
+        [
+          { F: "01", I: "1", S: "1" },
+          { F: "1", I: "2", S: "2" },
+        ],
+        { code: "F", order: "I", orderInMaster: "S" }
+      )
+    ).toThrow(/"01" and "1"/);
+    expect(() => findVersionPairs(["01_Q", "01_Opt", "1_Q", "1_Opt"])).toThrow(/Options Matrix uses both "01" and "1"/);
+    // Repeated rows of one spelling are fine, and 001/002 still bind to 1/2 by number
+    const one = normalizeItemAnalysis(
+      [
+        { Version: "01", "Version Q#": "1", "Master Q#": "1" },
+        { Version: "01", "Version Q#": "2", "Master Q#": "2" },
+      ],
+      "NEW"
+    );
+    expect(one.map((r) => r.code)).toEqual([1, 1]);
+    expect(bindVersionCodes(["001", "002"], ["1", "2"]).kind).toBe("numeric");
   });
 
   it("manual binding suggests by deterministic position and maps through a Map (any name is safe)", () => {

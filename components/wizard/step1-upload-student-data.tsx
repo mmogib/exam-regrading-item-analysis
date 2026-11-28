@@ -20,15 +20,22 @@ import { error as logError } from '@/lib/logger';
 export function Step1UploadStudentData() {
   const { state, updateStudentData, dismissNotice } = useWizard();
   const [loading, setLoading] = useState(false);
-  // A read that finishes after a newer read started, or after leaving Step 1, is ignored
+  // A read that finishes after a newer read started, after leaving Step 1, or after the
+  // student data changed (for example Start Over) is ignored (P11; 011 D2)
   const readToken = useRef(0);
   const mounted = useRef(true);
+  const latestRevision = useRef(state.studentRevision);
   useEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
     };
   }, []);
+  useEffect(() => {
+    latestRevision.current = state.studentRevision;
+  }, [state.studentRevision]);
+  // Revision the pending column-mapping screen was read against
+  const [draftRevision, setDraftRevision] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [uploadedFile, setUploadedFile] = useState<{
     name: string;
@@ -50,7 +57,8 @@ export function Step1UploadStudentData() {
 
   const handleFileSelect = async (file: File) => {
     const token = ++readToken.current;
-    const current = () => token === readToken.current && mounted.current;
+    const startRevision = state.studentRevision;
+    const current = () => token === readToken.current && mounted.current && latestRevision.current === startRevision;
     setLoading(true);
     setError(null);
     setUploadedFile(null);
@@ -72,6 +80,7 @@ export function Step1UploadStudentData() {
         setRawData(fileData);
         setDetection(fileDetection);
         setTempFileName(file.name);
+        setDraftRevision(startRevision);
         setColumnMapping({
           idColumn: fileDetection.idColumn || '',
           codeColumn: fileDetection.codeColumn || ''
@@ -96,6 +105,11 @@ export function Step1UploadStudentData() {
   const handleApplyMapping = () => {
     if (!detection || !columnMapping.idColumn || !columnMapping.codeColumn) {
       setError('Please select both ID and Code columns.');
+      return;
+    }
+    if (draftRevision !== latestRevision.current) {
+      setShowMappingUI(false);
+      setError('The wizard was reset or other student data was loaded while this file was waiting for its columns. Upload it again.');
       return;
     }
 

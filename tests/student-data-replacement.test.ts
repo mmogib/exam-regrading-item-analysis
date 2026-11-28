@@ -400,4 +400,98 @@ describe("the wizard with file reads held open", () => {
     expect(container.textContent).toMatch(/Later steps were reset/);
     expect(container.textContent).toMatch(/The item analysis file "map-a\.csv" was removed/);
   });
+
+  /* ---------------- 011 D1: superseded Step 3 attempts ---------------- */
+
+  const anyButton = (text: string) =>
+    [...document.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent?.trim() === text);
+  const goToStep3 = async () => {
+    await act(async () => button("Next")!.click());
+    await act(async () => button("Continue to Item Analysis")!.click());
+  };
+  // Student code 001, key A,A; students A,A and A,B
+  const examD1: ExamRow[] = [examRow("0", "001", ["A", "A"]), examRow("u1", "001", ["A", "A"]), examRow("u2", "001", ["A", "B"])];
+  const qm = (version: string, masters: number[]) =>
+    ["Version,Version Q#,Master Q#,Permutation,Correct", ...masters.map((m, i) => `${version},${i + 1},${m},ABCDE,A`)].join("\n") + "\n";
+  const orderOf = () => wizard.state.itemAnalysisData!.map((r) => `${r.order}->${r.order_in_master}`);
+
+  it("an old code-mapping screen cannot replace a newer accepted file", async () => {
+    await mount(true);
+    await uploadStudents(examD1, "d1.csv");
+    await goToStep3();
+    await choose(makeFile(qm("X", [2, 1]), "draft-a.csv")); // code X: the mapping screen opens
+    await settle();
+    expect(button("Accept Mapping & Continue")).toBeDefined();
+    await choose(makeFile(qm("1", [1, 2]), "accepted-b.csv")); // code 1 = 001: bound by number
+    await settle();
+    expect(wizard.state.itemAnalysisFileName).toBe("accepted-b.csv");
+    expect(orderOf()).toEqual(["1->1", "2->2"]);
+    // The old screen is gone; nothing of draft A can be accepted any more
+    expect(button("Accept Mapping & Continue")).toBeUndefined();
+    expect(wizard.state.itemAnalysisFileName).toBe("accepted-b.csv");
+  });
+
+  it("an old column-mapping screen is withdrawn when another file is chosen", async () => {
+    await mount(true);
+    await uploadStudents(examD1, "d1.csv");
+    await goToStep3();
+    await choose(makeFile("Form,Item,Source Item\nX,1,2\nX,2,1\n", "unknown.csv")); // UNKNOWN format
+    await settle();
+    expect(button("Apply Mapping")).toBeDefined();
+    await choose(makeFile(qm("1", [1, 2]), "accepted-b.csv"));
+    await settle();
+    expect(button("Apply Mapping")).toBeUndefined();
+    expect(wizard.state.itemAnalysisFileName).toBe("accepted-b.csv");
+  });
+
+  it("two Step 3 reads finishing in reverse order keep the newer file", async () => {
+    await mount(true);
+    await uploadStudents(examD1, "d1.csv");
+    await goToStep3();
+    const real = vi.mocked(excel.readCSVFileWithDetection).getMockImplementation()!;
+    const first = deferred<CSVDetectionResult>();
+    const second = deferred<CSVDetectionResult>();
+    vi.mocked(excel.readCSVFileWithDetection)
+      .mockImplementationOnce(() => first.promise)
+      .mockImplementationOnce(() => second.promise);
+    await choose(makeFile("a", "older.csv"));
+    await choose(makeFile("b", "newer.csv"));
+    await act(async () => second.resolve(await real(makeFile(qm("1", [1, 2]), "newer.csv"))));
+    await settle();
+    await act(async () => first.resolve(await real(makeFile(qm("1", [2, 1]), "older.csv"))));
+    await settle();
+    expect(wizard.state.itemAnalysisFileName).toBe("newer.csv");
+    expect(orderOf()).toEqual(["1->1", "2->2"]);
+  });
+
+  /* ---------------- 011 D2: Start Over while Step 1 is mounted ---------------- */
+
+  const startOver = async () => {
+    await act(async () => button("Start Over")!.click());
+    await act(async () => anyButton("Yes, Start Over")!.click());
+  };
+
+  it("Start Over cancels a Step 1 read that is still loading", async () => {
+    await mount(true);
+    const real = vi.mocked(excel.readExamDataFileWithDetection).getMockImplementation()!;
+    const held = deferred<Awaited<ReturnType<typeof excel.readExamDataFileWithDetection>>>();
+    vi.mocked(excel.readExamDataFileWithDetection).mockImplementationOnce(() => held.promise);
+    await choose(makeFile(csv(examA), "a.csv"));
+    await startOver();
+    expect(wizard.state.studentData).toBeNull();
+    await act(async () => held.resolve(await real(makeFile(csv(examA), "a.csv"))));
+    await settle();
+    expect(wizard.state.studentData).toBeNull();
+    expect(wizard.state.completedSteps).toEqual([]);
+  });
+
+  it("Start Over withdraws a Step 1 column-mapping screen", async () => {
+    await mount(true);
+    await choose(makeFile("Learner,Paper,1,2\n0,001,A,B\ns1,001,A,B\n", "needs-mapping.csv"));
+    await settle();
+    expect(button("Apply Mapping & Continue")).toBeDefined();
+    await startOver();
+    expect(button("Apply Mapping & Continue")).toBeUndefined();
+    expect(wizard.state.studentData).toBeNull();
+  });
 });

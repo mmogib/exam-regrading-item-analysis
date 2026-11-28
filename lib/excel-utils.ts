@@ -622,6 +622,10 @@ export function findVersionPairs(headers: string[]): VersionPairs | null {
     pairs.push({ code: entry.code, qCol: entry.q, optCol: entry.opt });
   }
 
+  if (mode === "named") {
+    assertDistinctVersionLabels(pairs.map((p) => p.code), "The Options Matrix");
+  }
+
   let consecutive = true;
   if (mode === "legacy") {
     pairs.sort((a, b) => Number(a.code) - Number(b.code));
@@ -653,6 +657,27 @@ export function normalizeVersionCode(raw: unknown): string | number {
 export function versionCodeKey(code: string | number): string {
   const s = String(code).trim();
   return /^\d+$/.test(s) ? s.replace(/^0+(?=\d)/, "") : s;
+}
+
+/**
+ * Reject two different spellings of one version number (for example "01" and
+ * "1") before any code is converted: once converted they would silently merge
+ * into one version (011 D3). Repeated rows with the same spelling are fine.
+ */
+export function assertDistinctVersionLabels(labels: unknown[], where = "The item analysis file"): void {
+  const byKey = new Map<string, string>();
+  for (const raw of labels) {
+    const label = String(raw ?? "").trim();
+    if (label === "") continue;
+    const key = versionCodeKey(label);
+    const seen = byKey.get(key);
+    if (seen !== undefined && seen !== label) {
+      throw new Error(
+        `${where} uses both "${seen}" and "${label}" as version codes, which the app reads as the same number. Use one spelling for each version.`
+      );
+    }
+    byKey.set(key, label);
+  }
 }
 
 /** Deterministic display order: all-digit codes by value, then other codes (numeric-aware), ties by the full code. */
@@ -826,7 +851,7 @@ export function parseWideFormat(
         if (masterLetter === correctMaster) versionCorrect = versionLetter;
       }
       result.push({
-        code: versions.mode === "legacy" ? Number(pair.code) : pair.code,
+        code: versions.mode === "legacy" ? Number(pair.code) : normalizeVersionCode(pair.code),
         order: Number(rawPosition),
         order_in_master: masterQ,
         permutation: perm.join(""),
@@ -911,6 +936,15 @@ export function normalizeItemAnalysis(
 ): ItemAnalysisRow[] {
   debug("Normalizing with format:", format);
   debug("Custom mapping:", customMapping);
+
+  // The version code of a row, before conversion (the same choice as below)
+  const rawCode = (row: any) =>
+    customMapping
+      ? row[customMapping.code]
+      : format === "NEW"
+        ? row.Version || row.version || row.VERSION
+        : row.code || row.Code || row.CODE;
+  assertDistinctVersionLabels(data.map(rawCode));
 
   const normalized = data
     .map((row) => {
@@ -2542,6 +2576,14 @@ function projectToMasterOrder(
         const value = row[String(p)];
         if (value === undefined || value === null) {
           fail(`version ${code}: student "${codeOf(row.ID)}" has no value for question ${p} (a blank answer is an empty cell).`);
+        }
+        // Grading counts only the first letter of a compound mark such as "AB", while the item
+        // statistics compare whole answers; the two would disagree (011 D4)
+        const answer = String(value).trim();
+        if (answer.length > 1) {
+          fail(
+            `version ${code}: student "${codeOf(row.ID)}" has "${answer}" for question ${p}. The comprehensive analysis needs one response per question; correct the mark in the student file.`
+          );
         }
       }
     }
