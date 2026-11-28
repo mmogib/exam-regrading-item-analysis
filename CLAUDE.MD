@@ -21,6 +21,7 @@ See `README.md` for installation and setup instructions.
 - Examples: `UNUSED_FILES_REPORT.md`, `DOCUMENTATION_PLAN.md`, `DistractorAnalysis.MD`
 - **Important**: When creating new documentation files, place them in `/references/` unless they are meant to be `CLAUDE.MD` or `README.MD`
 - `references/channels/` holds the correspondence with an external reviewer (Codex), relayed by the user; its `README.md` has the protocol and an index. Decisions are recorded in the topic notes, not in the channel.
+- **Workflow rule (user):** before implementing any fix or feature, write the plan into its topic note and send it to Codex as the next channel message. Implementation waits until the reply is processed. Do not ask "shall I go ahead?" before that step.
 
 ## Current State (as of 2026-11-27)
 
