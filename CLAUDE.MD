@@ -51,7 +51,7 @@ See `README.md` for installation and setup instructions.
 - P5: custom Shuffler version names in Options Matrix headers are not recognised.
 - P6–P11: older issues found in the P2 review (channel 004). They are not part of 1.8.1. P11 (a stale item-analysis file after a new Step 1 upload) is next.
 - P12 (low): Step 3 reads numeric version codes as numbers, so padded codes always need the code-mapping screen.
-- Minor wording issues.
+- Minor wording issues: fixed on `new-feat`, for 1.9.1.
 
 **Local-only data (gitignored)**
 - `sample_files/`: real exam data, plus `shuffler_latest/`, a Shuffler v1.9.0 export including the `.tex`, and `__baseline__/`, the regression baseline for `tests/samples.local.test.ts`.
@@ -811,9 +811,9 @@ All of these predate the upgrade and were found while writing tests or reviewing
 - The Shuffler writes `${versionName}_Q` / `${versionName}_Opt`.
 - With its default names (`version_N`) the files work. With custom names, such as `A_Q` in its own help example, the file is not detected as WIDE, and `parseWideFormat` needs numeric `version_N` / `vN` columns.
 
-**Minor (open):**
-- The Step 1 mapping hint says solution rows have Code = "0" or "00". The documented format is ID = "0" with Code = the real version.
-- Step 3's mismatch message says "QUESTIONS_MAP says …" even when an Options Matrix was uploaded.
+**Minor wording (fixed on `new-feat`, for 1.9.1):**
+- The Step 1 mapping hint said solution rows have Code = "0" or "00". It now describes the documented format: ID 0 with the version's real code.
+- Step 3's mismatch message said "QUESTIONS_MAP says …" for every format. It now says "the item analysis file says …".
 
 **Out of scope (user decision):** Options Matrix exports from an earlier Shuffler version that used the reverse direction. Which version changed is not recorded. Use their Question Map instead.
 

@@ -103,7 +103,7 @@ describe("validateCorrectAnswers", () => {
   it("reports a mismatch with version and question", () => {
     expect(
       validateCorrectAnswers([{ code: 1, order: 2, order_in_master: 2, permutation: "ABCDE", correct: "C" }], exam)
-    ).toContain("Version 1, Q2: QUESTIONS_MAP says 'C', solution row has 'B'");
+    ).toContain("Version 1, Q2: the item analysis file says 'C', solution row has 'B'");
   });
 
   it("skips validation without permutation data or without a matching solution row", () => {

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Step 1's column-mapping hint now describes solution rows correctly (ID 0 with the version's real code).
+- Step 3's answer-mismatch message says "the item analysis file says …" instead of "QUESTIONS_MAP says …", which was wrong for Options Matrix and other formats.
+
 ### To Consider
 - Template download buttons in wizard steps
 - Help tooltips or info buttons per step

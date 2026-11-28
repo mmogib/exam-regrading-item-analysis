@@ -1695,7 +1695,7 @@ export function validateCorrectAnswers(
 
     if (!solutionAnswer.includes(ia.correct)) {
       errors.push(
-        `Version ${code}, Q${ia.order}: QUESTIONS_MAP says '${ia.correct}', solution row has '${solutionAnswer}'`
+        `Version ${code}, Q${ia.order}: the item analysis file says '${ia.correct}', solution row has '${solutionAnswer}'`
       );
     }
   });

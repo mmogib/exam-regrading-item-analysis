@@ -291,7 +291,7 @@ export function Step1UploadStudentData() {
                   ))}
                 </select>
                 <p className="text-xs text-muted-foreground">
-                  Column containing exam version codes (solution rows should have Code = &quot;0&quot; or &quot;00&quot;)
+                  Column containing exam version codes, such as 001, 002. Solution rows have ID 0 and their version&apos;s code.
                 </p>
               </div>
             </div>
