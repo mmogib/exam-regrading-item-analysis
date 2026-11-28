@@ -23,12 +23,13 @@ See `README.md` for installation and setup instructions.
 - `references/channels/` holds the correspondence with an external reviewer (Codex), relayed by the user; its `README.md` has the protocol and an index. Decisions are recorded in the topic notes, not in the channel.
 - **Workflow rule (user):** before implementing any fix or feature, write the plan into its topic note and send it to Codex as the next channel message. Implementation waits until the reply is processed. Do not ask "shall I go ahead?" before that step.
 
-## Current State (as of 2026-11-27)
+## Current State (as of 2026-11-28)
 
 **Release**
-- **Live:** v1.8.0 at https://regrading.netlify.app (Netlify site `regrading`). The version is shown in the page footer.
+- **Live:** v1.8.1 at https://regrading.netlify.app (Netlify site `regrading`). The version is shown in the page footer.
 - **Browser check:** the user checked the live v1.8.0 site on 2026-11-28; all good.
-- **Tags:** `v1.7.0`, `v1.7.1`, `v1.8.0` (annotated, pushed).
+- **Tags:** `v1.7.0`, `v1.7.1`, `v1.8.0`, `v1.8.1` (annotated, pushed).
+- **Next:** the template dialog (1.9.0). Its design was reviewed in channel 005 and its implementation is under review in 007; the work is held in a git stash until then. See `references/TEMPLATE_DIALOG_FEATURE.md`.
 - **Branches:** `new-feat` is the single development branch and `main` is the release branch. Releases fast-forward `main` to `new-feat`, so there are no merge commits.
 
 **Release procedure**
@@ -44,7 +45,7 @@ See `README.md` for installation and setup instructions.
 - Dummy data: `npm run gen:dummy`; see README.
 
 **Open issues** (details under "November 2026 Updates → Known Issues")
-- P2: **fixed on `new-feat`** (not released). Release 1.8.1 waits for Codex's re-verification (channel 006).
+- P2: fixed in 1.8.1 (channels 004 and 006).
 - P3: WIDE detection depends on the first row. It has an `it.fails` marker test.
 - P5: custom Shuffler version names in Options Matrix headers are not recognised.
 - P6–P11: older issues found in the P2 review (channel 004). They are not part of 1.8.1. P11 (a stale item-analysis file after a new Step 1 upload) is next.
@@ -773,7 +774,7 @@ All of these predate the upgrade and were found while writing tests or reviewing
 - The Shuffler documents `Option` as the original letter and `[Version]_Opt` as the letter it became. `parseWideFormat()` reads it that way, and the January reverse lookup is correct.
 - Only an older sample export (`OPTIONS_MATRIX_Math 201…`) used the opposite direction. Old files are out of scope; their Question Map works.
 
-**P2 (medium): fixed on `new-feat`, to be released as 1.8.1.** Comprehensive item statistics used to be computed per *version position*.
+**P2 (medium): fixed in 1.8.1.** Comprehensive item statistics used to be computed per *version position*.
 - **The bug:** `p_i`, `D_i` and `r_pb` were computed per version position but labelled as master questions, while `DE` and the option statistics were per master question. With shuffled question order the rows mixed questions, so the decisions and KR-20 were wrong. KR-20 could be off in either direction.
 - **The fix:** `projectToMasterOrder()` in `lib/excel-utils.ts` puts every answer in master order before the analysis. It works on copies and keeps the row order, the version letters and the option permutations.
 - **Checks first:** for each version that has students, it refuses to compute, with a clear error, when:

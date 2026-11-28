@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### To Consider
+- Template download buttons in wizard steps
+- Help tooltips or info buttons per step
+- Undo/redo for re-grading changes
+- Import/export wizard state (JSON)
+
+---
+
+## [1.8.1] - 2026-11-28
+
 ### Fixed
 - **Comprehensive analysis:** difficulty (p), discrimination (D) and item point-biserial (r_pb) are now computed and labelled by master question. Earlier reports used version positions, so they could pool different questions or put statistics under the wrong master-question label.
   - Re-run an earlier comprehensive report if any version's question order differs from the master order. This includes a single shuffled version, and versions that all share the same shuffled order.
@@ -21,12 +31,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - a missing solution row, or conflicting solution rows;
   - a missing answer cell (an empty cell still counts as a blank answer).
 - The item analysis file's `Correct` value must be a single letter. Solution rows can still contain several accepted answers.
-
-### To Consider
-- Template download buttons in wizard steps
-- Help tooltips or info buttons per step
-- Undo/redo for re-grading changes
-- Import/export wizard state (JSON)
 
 ---
 
