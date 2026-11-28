@@ -32,6 +32,7 @@ import {
   MAX_STUDENTS,
   parseCsv,
   readShufflerFile,
+  step3Code,
   validateSettings,
   type DownloadKind,
   type GradingCenterSettings,
@@ -430,6 +431,29 @@ describe("version codes and Step 3", () => {
     expect(() => readShufflerFile(smallQuestionMap(["1A", "1B"]))).toThrow(/"1A" and "1B" would both be read as 1 in Step 3/);
     expect(() => readShufflerFile(smallQuestionMap(["1", "1A"]))).toThrow(/would both be read as 1 in Step 3/);
     expect(() => readShufflerFile(smallQuestionMap(["01", "1"]))).toThrow(/both become code 001/);
+    // Step 3's parseInt has no radix, so "0x1" is 1 and "0xA" is 10
+    expect(() => readShufflerFile(smallQuestionMap(["0x1", "1"]))).toThrow(/would both be read as 1 in Step 3/);
+    expect(() => readShufflerFile(smallQuestionMap(["0xA", "10"]))).toThrow(/would both be read as 10 in Step 3/);
+  });
+
+  it("predicts Step 3's code exactly (the same conversion as normalizeItemAnalysis)", async () => {
+    const labels = ["1", "001", "10", "1A", "0x1", "0xA", "A", "B2", " 7 "];
+    // Run the real Step 3 parser on a one-row Normal file per label
+    for (const label of labels) {
+      const rows = await importItemFile(`Version,Version Q#,Master Q#\n"${label}",1,1\n`, "n.csv");
+      expect(step3Code(label), label).toBe(String(rows[0].code));
+    }
+  });
+
+  it("accepts codes Step 3 tells apart, such as 0x1 and 0x2, and they complete the flow", async () => {
+    const snap = buildGradingCenterSnapshot(small, { fileName: "map.csv", bytes: enc(smallQuestionMap(["0x1", "0x2"])) });
+    await completeFlow(snap);
+  });
+
+  it("rejects version names that break Step 3's code mapping", () => {
+    for (const name of ["__proto__", "constructor", "toString"]) {
+      expect(() => readShufflerFile(smallQuestionMap(["1", name]))).toThrow(new RegExp(`Version name "${name}" cannot be used`));
+    }
   });
 
   it("numeric, mixed and alphabetic codes complete the whole flow", async () => {
@@ -462,9 +486,9 @@ describe("the uploaded original in Step 3", () => {
   };
   const step3Format = async (text: string, name: string) => (await readCSVFileWithDetection(asFile(text, name))).format;
 
-  it("says when it works, and it does", async () => {
+  it("makes no promise about an original without known blockers (this one does read in Step 3)", async () => {
     const { snap, file } = original(flagged, "matrix.csv");
-    expect(file.description).toMatch(/It also works in Step 3/);
+    expect(file.description).toBe("For your records. For Step 3, use the matching Question Map above.");
     expect(await step3Format(flagged, "matrix.csv")).toBe("WIDE");
     const rows = await importStudentFile(snap);
     const map = mapCodesByPosition(await importItemFile(flagged, "matrix.csv"), rows);
@@ -483,15 +507,50 @@ describe("the uploaded original in Step 3", () => {
     const lines = flagged.trim().split("\n");
     const blankFirst = [lines[0], lines[1].replace(/,(YES|NO),/, ",,"), ...lines.slice(2)].join("\n") + "\n";
     const { snap, file } = original(blankFirst, "blank.csv");
-    expect(file.description).toMatch(/first data row has an empty cell/);
+    expect(file.description).toMatch(/a required column is empty in its first data row/);
     expect(await step3Format(blankFirst, "blank.csv")).not.toBe("WIDE");
     await completeFlow(snap);
   });
 
-  it("mentions the planted wrong key", () => {
-    const snap = buildGradingCenterSnapshot({ ...small, plantMiskey: true }, { fileName: "map.csv", bytes: enc(smallQuestionMap(["1", "2"])) });
-    expect(fileOf(snap, "original").description).toMatch(/rejects it until you correct the planted wrong key/);
-    expect(fileOf(snap, "question-map").description).toMatch(/rejects it until you correct the planted wrong key/);
+  it("an empty optional column does not count as a blocker, and that original reads in Step 3", async () => {
+    const lines = flagged.trim().split("\n");
+    const withNote = lines.map((l, i) => (i === 0 ? `${l},Note` : `${l},`)).join("\n") + "\n";
+    const { snap, file } = original(withNote, "note.csv");
+    expect(file.description).not.toMatch(/cannot read/);
+    expect(await step3Format(withNote, "note.csv")).toBe("WIDE");
+    const rows = await importStudentFile(snap);
+    expect(validateCorrectAnswers(mapCodesByPosition(await importItemFile(withNote, "note.csv"), rows), rows)).toBeNull();
+  });
+
+  it("says when Step 3 cannot read it (version numbers not consecutive)", async () => {
+    const gap = flagged.replace(/version_2_/g, "version_3_");
+    const { snap, file } = original(gap, "gap.csv");
+    expect(file.description).toMatch(/its version numbers are not consecutive/);
+    await completeFlow(snap);
+  });
+
+  it("never claims a Question Map original works (header case and key case Step 3 may not accept)", () => {
+    const qm = smallQuestionMap(["1", "2"]);
+    const variants = [
+      qm.replace("Version,Version Q#", "vErSiOn,Version Q#"),
+      qm.replace("Version,Version Q#,", "Version ,Version Q# ,").replace("Master Q#", "Master Q# "),
+      qm.replace(/,([ABC]),1$/gm, (_, c: string) => `,${c.toLowerCase()},1`),
+    ];
+    for (const text of variants) {
+      const { file } = original(text, "map.csv");
+      expect(file.description).toBe("For your records. For Step 3, use the matching Question Map above.");
+    }
+  });
+
+  it("mentions the planted wrong key on both files, whichever the original's description", () => {
+    const note = /The student file has a planted wrong key: Step 3 rejects it until you correct that question in Step 2/;
+    const plain = buildGradingCenterSnapshot({ ...small, plantMiskey: true }, { fileName: "map.csv", bytes: enc(smallQuestionMap(["1", "2"])) });
+    expect(fileOf(plain, "original").description).toMatch(note);
+    expect(fileOf(plain, "question-map").description).toMatch(note);
+    const renamed = flagged.replace(/version_1_/g, "A_").replace(/version_2_/g, "B_");
+    const unreadable = buildGradingCenterSnapshot({ ...small, plantMiskey: true }, { fileName: "named.csv", bytes: enc(renamed) });
+    expect(fileOf(unreadable, "original").description).toMatch(/cannot read this file as it is/);
+    expect(fileOf(unreadable, "original").description).toMatch(note);
   });
 });
 

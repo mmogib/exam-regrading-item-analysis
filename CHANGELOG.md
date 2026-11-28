@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - It also gives the matching Step 3 files and the expected results (.json).
   - Optionally, it starts from your Shuffler Question Map or Options Matrix.
   - Options: planted problem questions, a planted wrong key (with a Shuffler file), and grading-center scan errors (`X` multiple marks, unreadable `@` ID digits and `@@` sections).
-  - The generated files use version codes 001, 002, ...; Step 3 asks you to confirm them against your Shuffler file's codes.
+  - The generated files pad numeric source version codes, for example 1 → 001, and keep alphabetic names. If Step 3 offers code mapping, confirm the binding between the item analysis and student-file codes. The expected-results JSON keeps the original source codes.
 
 ### Changed
 - Step 3's template buttons are labelled as fixed examples. The matching fixed student example is in the Step 1 dialog.

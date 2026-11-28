@@ -184,13 +184,15 @@ const sortCodes = (codes: string[]) => [...codes].sort((a, b) => Number(a) - Num
 const isWholeNumber = (v: string) => /^\d+$/.test(v.trim());
 
 /**
- * The code Step 3 sees for a version label: like normalizeItemAnalysis in
- * lib/excel-utils.ts, a label starting with digits is read as that number
- * ("001" and "1A" are both 1).
+ * The code Step 3 sees for a version label. This mirrors normalizeItemAnalysis
+ * in lib/excel-utils.ts exactly, including its radix-less parseInt: a label
+ * starting with digits is read as that number ("001" and "1A" are both 1, and
+ * "0x1" is 1 too).
  */
 export const step3Code = (code: string) => {
-  const n = parseInt(code, 10);
-  return Number.isNaN(n) ? code.trim() : String(n);
+  // No radix on purpose: it must match Step 3's conversion exactly
+  const n = parseInt(String(code));
+  return Number.isNaN(n) ? String(code).trim() : String(n);
 };
 
 /** Grading-center version code for a source code: numeric codes are padded to 3 digits (1 -> 001). */
@@ -248,7 +250,8 @@ function readQuestionMap(headers: string[], body: string[][]): ShufflerExam {
   });
   const versions = sortCodes(Array.from(new Set(entries.map((e) => e.code))));
   const questions = Math.max(0, ...entries.map((e) => e.master));
-  // Every column Step 3 needs is validated non-empty, so the unchanged file reads there too
+  // No known blocker; the dialog still makes no promise about the unchanged original (header
+  // spellings and letter case this reader accepts can differ from what Step 3 accepts)
   return { kind: "question-map", questions, versions, entries, step3Issues: [] };
 }
 
@@ -342,8 +345,10 @@ function readOptionsMatrix(headers: string[], body: string[][]): ShufflerExam {
     const nums = pairs.map((p) => Number(p.code)).sort((a, b) => a - b);
     if (nums.some((v, i) => i > 0 && v !== nums[i - 1] + 1)) step3Issues.push("its version numbers are not consecutive");
   }
-  if (headers.some((_, i) => (body[0]?.[i] ?? "").trim() === "")) {
-    step3Issues.push("its first data row has an empty cell, and Step 3 takes the column names from that row");
+  // Step 3 takes the column names from the first data row, so a required column left empty there is lost
+  const required = [cQ, cOption, cFlag, ...pairs.flatMap((p) => [p.q, p.opt])];
+  if (required.some((i) => (body[0]?.[i] ?? "").trim() === "")) {
+    step3Issues.push("a required column is empty in its first data row, and Step 3 takes the column names from that row");
   }
 
   return {
@@ -368,6 +373,8 @@ function validateShufflerExam(exam: ShufflerExam) {
     if (code === "") throw new Error("A row has an empty version code.");
     if (/^0+$/.test(code)) throw new Error(`Version code "${code}" is reserved for solution rows.`);
     if (/[",\r\n]/.test(code)) throw new Error(`Version code "${code}" contains a comma, quote or line break.`);
+    // Step 3's code mapping keeps codes as keys of plain objects, so these names break it
+    if (code in Object.prototype) throw new Error(`Version name "${code}" cannot be used: the app uses it internally. Rename it.`);
     const gc = gradingCenterCode(code);
     if (gcCodes.has(gc)) throw new Error(`Versions "${code}" and another version both become code ${gc}.`);
     gcCodes.add(gc);
@@ -534,7 +541,7 @@ export function buildGradingCenterSnapshot(settings: GradingCenterSettings, sour
   };
 
   const miskeyNote = shuffler && settings.plantMiskey
-    ? " Step 3 rejects it until you correct the planted wrong key in Step 2."
+    ? " The student file has a planted wrong key: Step 3 rejects it until you correct that question in Step 2."
     : "";
   const files: DownloadFile[] = [
     {
@@ -580,9 +587,11 @@ export function buildGradingCenterSnapshot(settings: GradingCenterSettings, sour
       kind: "original",
       name: source!.fileName,
       label: "Your uploaded file (unchanged)",
-      description: shuffler.step3Issues.length
-        ? `For your records. Step 3 cannot read this file as it is: ${shuffler.step3Issues.join("; ")}. Use the matching Question Map above.`
-        : `For your records. It also works in Step 3: accept the suggested code mapping.${miskeyNote}`,
+      // Only known blockers are reported; there is no promise that the original works in Step 3
+      description:
+        (shuffler.step3Issues.length
+          ? `For your records. Step 3 cannot read this file as it is: ${shuffler.step3Issues.join("; ")}. Use the matching Question Map above.`
+          : "For your records. For Step 3, use the matching Question Map above.") + miskeyNote,
       mime: CSV_MIME,
       content: new Uint8Array(source!.bytes),
     });

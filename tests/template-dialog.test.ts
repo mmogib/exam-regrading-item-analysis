@@ -96,14 +96,14 @@ describe("TemplateDialog", () => {
     questionMapTable(buildDataset({ ...DEFAULT_PARAMS, questions: 8, versions: 3, plants: false, seed: 3 }).exam)
   );
   /** A file whose read finishes only when `resolve` is called. */
-  const slowFile = (name: string) => {
+  const slowFile = (name: string, text = mapText) => {
     let resolve!: () => void;
     const ready = new Promise<void>((r) => (resolve = r));
-    const file = new File([mapText], name);
+    const file = new File([text], name);
     Object.defineProperty(file, "arrayBuffer", {
       value: async () => {
         await ready;
-        return new TextEncoder().encode(mapText).buffer;
+        return new TextEncoder().encode(text).buffer;
       },
     });
     return { file, resolve: async () => act(async () => resolve()) };
@@ -204,5 +204,31 @@ describe("TemplateDialog", () => {
     for (let i = 0; i < n; i++) {
       expect(await blobToBytes(first[i].blob)).toEqual(await blobToBytes(second[i].blob));
     }
+  });
+
+  it("a finished snapshot survives closing and reopening", async () => {
+    await open();
+    await setNumber("Students", "30");
+    await act(async () => generateButton().click());
+    await settle();
+    const before = [...downloads()].map((li) => li.textContent);
+    expect(before.length).toBeGreaterThan(0);
+    await act(async () => escape());
+    await open();
+    expect([...downloads()].map((li) => li.textContent)).toEqual(before);
+  });
+
+  it("a file that cannot be used clears the reading state and leaves no downloads", async () => {
+    await open();
+    await act(async () => generateButton().click());
+    await settle();
+    expect(downloads().length).toBeGreaterThan(0);
+    const bad = slowFile("notes.csv", "ID,Code,1\n1,001,A\n");
+    await act(async () => choose(bad.file));
+    await bad.resolve();
+    expect(dialog()!.textContent).toMatch(/This file cannot be used/);
+    expect(dialog()!.textContent).not.toMatch(/Reading notes\.csv/);
+    expect(generateButton().disabled).toBe(false);
+    expect(downloads()).toHaveLength(0);
   });
 });
