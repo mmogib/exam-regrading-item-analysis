@@ -26,11 +26,12 @@ See `README.md` for installation and setup instructions.
 ## Current State (as of 2026-11-28)
 
 **Release**
-- **Live:** v1.9.0 at https://regrading.netlify.app (Netlify site `regrading`). The version is shown in the page footer.
+- **Live:** v1.9.1 at https://regrading.netlify.app (Netlify site `regrading`). The version is shown in the page footer.
 - **Browser check:** the user checked the live v1.8.0 site on 2026-11-28; all good.
-- **Tags:** `v1.7.0`, `v1.7.1`, `v1.8.0`, `v1.8.1`, `v1.9.0` (annotated, pushed).
+- **Tags:** `v1.7.0`, `v1.7.1`, `v1.8.0`, `v1.8.1`, `v1.9.0`, `v1.9.1` (annotated, pushed).
 - **1.9.0:** the Download Template dialog (channels 005, 007 and 008; `references/TEMPLATE_DIALOG_FEATURE.md`). The user tested it in the browser, including Excel, focus, Escape and a narrow window.
-- **Next:** release 1.9.1: P11, the wording fixes and the batch P3, P5–P10, P12 are done on `new-feat`; re-verification in channel 011.
+- **1.9.1:** P11, the two wording fixes, and P3, P5–P10, P12 (channels 009, 010, 011; `references/BATCH_1.9.1.md`, `references/ISSUE_P11_STALE_ITEM_ANALYSIS.md`).
+- **Next:** no known open issues. The old reversed Options Matrix direction stays out of scope.
 - **Branches:** `new-feat` is the single development branch and `main` is the release branch. Releases fast-forward `main` to `new-feat`, so there are no merge commits.
 
 **Release procedure**
@@ -47,9 +48,9 @@ See `README.md` for installation and setup instructions.
 
 **Open issues** (details under "November 2026 Updates → Known Issues")
 - P2: fixed in 1.8.1 (channels 004 and 006).
-- P3, P5–P10, P12: fixed on `new-feat`, for 1.9.1 (channel 010; `references/BATCH_1.9.1.md`).
-- P11: fixed on `new-feat`, for 1.9.1 (channel 009).
-- Minor wording issues: fixed on `new-feat`, for 1.9.1.
+- P3, P5–P10, P12: fixed in 1.9.1 (channels 010, 011; `references/BATCH_1.9.1.md`).
+- P11: fixed in 1.9.1 (channels 009, 011).
+- Minor wording issues: fixed in 1.9.1.
 
 **Local-only data (gitignored)**
 - `sample_files/`: real exam data, plus `shuffler_latest/`, a Shuffler v1.9.0 export including the `.tex`, and `__baseline__/`, the regression baseline for `tests/samples.local.test.ts`.
@@ -791,7 +792,7 @@ All of these predate the upgrade and were found while writing tests or reviewing
 - **Tests:** in `tests/analysis.test.ts` (hand-checked, including the guards, a single shuffled version, unequal versions and constant items), `tests/export-and-templates.test.ts` (shuffled export) and `tests/dummy-data.test.ts` (against the oracle, which now includes `rpb` and either key).
 - **Review:** channels 004 and 006.
 
-**Found in the P2 review (channel 004): all fixed on `new-feat` for 1.9.1 (channel 010)**
+**Found in the P2 review (channel 004): all fixed in 1.9.1 (channels 010, 011)**
 - **P6 (medium, fixed):** `DE` and the option statistics used the map's single `correct` letter. They now use the working accepted set from the solution rows (`projectToMasterOrder` returns `masters`). Versions must agree on each master's accepted set (master letters), or the comprehensive analysis stops. This replaces 1.8.1's scalar-key equality. The scalar `correct` must be one letter that the version's solution row accepts.
 - **P7 (low, fixed):** the option count n is the permutation length. `parseWideFormat` emits unpadded permutations and validates options A..n and the shuffles, so `DE` = functional distractors / (n − accepted) × 100, or `null` (N/A) with no distractors. The `ItemStatistics.DE` type is `number | null`, and the UI, export, sorting and decisions handle null. Option rows are A..n plus Blank/Other.
 - **P8 (low, fixed):** the comprehensive preflight requires K ≥ 2. `computeKR20` returns 0 for k < 2 as a defence only.
@@ -803,23 +804,23 @@ All of these predate the upgrade and were found while writing tests or reviewing
   - Step 3 binds codes with `bindVersionCodes`: exact sets pass; a unique, complete all-digit match by number (1 = 001) is applied automatically, with a note; otherwise the mapping screen appears, with a deterministic suggestion (`sortVersionCodes`) and `Map`-based rebinding (`applyCodeBinding`).
   - The template dialog's `step3Code` follows the same rule.
   - `validateCorrectAnswers` still skips codes without a solution row, so binding happens first.
-- **P11 (medium): fixed on `new-feat`, for 1.9.1 (channel 009).** A new Step 1 upload used to keep the accepted item-analysis file and the Step 2 state, so Step 4 could analyse new students with another exam's map. Every successful Step 1 import, including identical rows, now clears Steps 2 and 3 and returns to Step 1 (`applyNewStudentData`).
+- **P11 (medium): fixed in 1.9.1 (channels 009, 011).** A new Step 1 upload used to keep the accepted item-analysis file and the Step 2 state, so Step 4 could analyse new students with another exam's map. Every successful Step 1 import, including identical rows, now clears Steps 2 and 3 and returns to Step 1 (`applyNewStudentData`).
   - Acceptance is bound to `studentRevision`, so a Step 3 check that finishes after the data changed is dropped, together with its Step 3 completion (`acceptItemAnalysis`, `acceptItemAnalysisTransition`).
   - Start Over keeps counting the revision up.
   - Step 1 ignores late reads.
   - Saved sessions from older versions are migrated once (storage version 2, `migrateStoredState`): the student data are kept, the item analysis is dropped.
   - Tests: `tests/student-data-replacement.test.ts`.
 
-**P3 (low): fixed for 1.9.1.** WIDE detection used to read the column names from the first data row, and SheetJS omits blank cells. `readCsvTable` now takes the columns from the header row, gives every row every column (`""`), and rejects repeated column names and files without data rows. The former `it.fails` marker is a normal test.
+**P3 (low): fixed in 1.9.1.** WIDE detection used to read the column names from the first data row, and SheetJS omits blank cells. `readCsvTable` now takes the columns from the header row, gives every row every column (`""`), and rejects repeated column names and files without data rows. The former `it.fails` marker is a normal test.
 
 **P4 (fixed in 1.7.1):** a key corrected in Step 2 used to be ignored by Steps 3 and 4. Re-grading now makes the revised data (with the corrected key) the working exam data, via `applyRegradedKey` in `contexts/wizard-context.tsx`. If the key changes after an item-analysis file was accepted, that file is cleared and must be re-uploaded, because it was validated against the old key. Tests: `tests/regrade.test.ts`.
 
-**P5 (low): fixed for 1.9.1.** `findVersionPairs` is one rule for detection, parsing and the template dialog: complete `<name>_Q` / `<name>_Opt` pairs.
+**P5 (low): fixed in 1.9.1.** `findVersionPairs` is one rule for detection, parsing and the template dialog: complete `<name>_Q` / `<name>_Opt` pairs.
 - A file whose pairs are all legacy (`version_N`, `vN`, ...) gets numeric codes and the consecutive-number check.
 - Any other file keeps every name as written, including `version_1` in a mixed file.
 - Orphan halves and repeated versions are errors.
 
-**Minor wording (fixed on `new-feat`, for 1.9.1):**
+**Minor wording (fixed in 1.9.1):**
 - The Step 1 mapping hint said solution rows have Code = "0" or "00". It now describes the documented format: ID 0 with the version's real code.
 - Step 3's mismatch message said "QUESTIONS_MAP says …" for every format. It now says "the item analysis file says …".
 

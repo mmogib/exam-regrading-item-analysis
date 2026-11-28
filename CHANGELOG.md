@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### To Consider
+- Template download buttons in wizard steps
+- Help tooltips or info buttons per step
+- Undo/redo for re-grading changes
+- Import/export wizard state (JSON)
+
+---
+
+## [1.9.1] - 2026-11-28
+
 ### Fixed
 - **A new student file now resets the later steps.**
   - A successful Step 1 upload, even of the same file, clears the accepted item analysis file and the previous re-grading, and returns to Step 1, with a notice saying what was removed. Before this, Step 4 could analyse the new students with the item analysis file of another exam.
@@ -34,12 +44,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Option point-biserial** (option table) now uses the same rest score as the item point-biserial (the total without that question). For a question with one accepted answer, the correct option's value equals the item's.
 - **Score groups T1–T4.** Students with the same total are always in the same group: a tie at a boundary goes to the higher group, so groups can be unequal or empty. Before this, a tie could be split. The top and bottom 27% groups used for D are unchanged.
 - The help and the Excel guide explain both, and N/A.
-
-### To Consider
-- Template download buttons in wizard steps
-- Help tooltips or info buttons per step
-- Undo/redo for re-grading changes
-- Import/export wizard state (JSON)
 
 ---
 
